@@ -1,14 +1,8 @@
-import io
 from typing import Literal
 
-import docx
-from fastapi import HTTPException
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel, Field
-from pypdf import PdfReader
-
 from functions.models import model
+from langchain_core.prompts import ChatPromptTemplate
 
 SkillCode = Literal[
     "COD",
@@ -88,25 +82,6 @@ def map_skill_metadata(profile: ProfileResponseModel) -> ProfileResponseModel:
     for skill in profile.skills:
         skill.skill_code = SKILL_CODES[skill.skill_name]
     return profile
-
-
-metadata_runnable = RunnableLambda(map_skill_metadata)
-
-
-def parse_document(file_content: bytes, filename: str) -> str:
-    """Extracts raw text from PDF or DOCX files[cite: 1]."""
-    if filename.lower().endswith(".pdf"):
-        reader = PdfReader(io.BytesIO(file_content))
-        return " ".join(
-            [page.extract_text() for page in reader.pages if page.extract_text()]
-        )
-    elif filename.lower().endswith(".docx"):
-        doc = docx.Document(io.BytesIO(file_content))
-        return " ".join([para.text for para in doc.paragraphs])
-    else:
-        raise HTTPException(
-            status_code=400, detail="Only PDF and DOCX files are supported."
-        )
 
 
 async def extract_data[T: BaseModel](

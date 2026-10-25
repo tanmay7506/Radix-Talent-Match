@@ -1,8 +1,10 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from files.prompts import profile_extraction_prompt
-from functions.profile_builder import extract_data, parse_document
-from functions.profile_builder import ProfileResponseModel
+from functions.prompts import profile_extraction_prompt
+from utils.extract_data import extract_data
+from utils.extract_data import ProfileResponseModel
+from utils.parse_document import parse_document
+
 
 profile_builder_router = APIRouter(
     prefix="/profile", tags=["profile", "profile-builder"]
