@@ -1,0 +1,142 @@
+import { useEffect, useRef } from 'react'
+import { gsap } from 'gsap'
+import './SkillsGrid.css'
+
+const SKILL_META = {
+  COD: { icon: '⌨️', color: '#6c63ff' },
+  DSA: { icon: '🌳', color: '#38b2ac' },
+  OOD: { icon: '🏗️', color: '#805ad5' },
+  APT: { icon: '🧠', color: '#d69e2e' },
+  COM: { icon: '💬', color: '#38a169' },
+  AI:  { icon: '🤖', color: '#e53e3e' },
+  CLD: { icon: '☁️', color: '#3182ce' },
+  SQL: { icon: '🗄️', color: '#dd6b20' },
+  SWE: { icon: '⚙️', color: '#6c63ff' },
+  SYS: { icon: '🔧', color: '#d53f8c' },
+  NET: { icon: '🌐', color: '#319795' },
+  OS:  { icon: '💻', color: '#744210' },
+  OTH: { icon: '✦',  color: '#718096' },
+}
+
+export default function SkillsGrid({ skills }) {
+  const gridRef = useRef(null)
+
+  useEffect(() => {
+    if (!skills?.length) return
+    gsap.fromTo(
+      gridRef.current.querySelectorAll('.skill-card'),
+      { opacity: 0, y: 30, scale: 0.9 },
+      {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        stagger: { amount: 0.6, from: 'start' },
+        duration: 0.55,
+        ease: 'power3.out',
+      }
+    )
+    // Animate each progress bar fill
+    gridRef.current.querySelectorAll('.skill-fill').forEach((el) => {
+      const target = el.dataset.level
+      gsap.fromTo(el,
+        { width: '0%' },
+        { width: `${target}%`, duration: 1, ease: 'power2.out', delay: 0.3 }
+      )
+    })
+  }, [skills])
+
+  if (!skills?.length) return null
+
+  return (
+    <section id="skills" className="skills-section">
+      <div className="section-header">
+        <h2 className="section-title">Skill Assessment</h2>
+        <p className="section-sub">AI-evaluated competencies extracted from your resume</p>
+      </div>
+      <div className="skills-grid" ref={gridRef}>
+        {skills.map((skill, i) => (\n          <SkillCard key={i} skill={skill} />\n        ))}
+      </div>
+    </section>
+  )
+}
+
+function SkillCard({ skill }) {
+  const meta = SKILL_META[skill.skill_code] || SKILL_META.OTH
+  const levelPct = (skill.skill_level / 10) * 100
+  const cardRef = useRef(null)
+
+  const handleMouseEnter = () => {
+    gsap.to(cardRef.current, {
+      y: -4,
+      boxShadow: `10px 10px 24px var(--neo-dark), -10px -10px 24px var(--neo-light)`,
+      duration: 0.3,
+      ease: 'power2.out',
+    })
+  }
+
+  const handleMouseLeave = () => {
+    gsap.to(cardRef.current, {
+      y: 0,
+      boxShadow: `var(--neo-shadow)`,
+      duration: 0.3,
+      ease: 'power2.out',
+    })
+  }
+
+  return (
+    <div
+      className="skill-card neo-card"
+      ref={cardRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="skill-top">
+        <div className="skill-icon" style={{ '--skill-color': meta.color }}>
+          <span>{meta.icon}</span>
+        </div>
+        <div className="skill-level-badge neo-inset">
+          <span style={{ color: meta.color }}>{skill.skill_level}</span>
+          <span className="skill-level-max">/10</span>
+        </div>
+      </div>
+
+      <div className="skill-name">{skill.skill_name}</div>
+
+      <div className="skill-bar neo-inset">
+        <div
+          className="skill-fill"
+          data-level={levelPct}
+          style={{ '--fill-color': meta.color, width: '0%' }}
+        />
+      </div>
+
+      <div className="skill-meta">
+        <ConfidencePip level={skill.confidence} />
+        {skill.evidence?.length > 0 && (
+          <span className="evidence-count">{skill.evidence.length} evidence{skill.evidence.length !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      {skill.evidence?.length > 0 && (
+        <details className="evidence-details">
+          <summary>View evidence</summary>
+          <ul className="evidence-list">
+            {skill.evidence.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  )
+}
+
+function ConfidencePip({ level }) {
+  const colors = { High: '#48bb78', Medium: '#ed8936', Low: '#fc8181' }
+  return (
+    <span className="confidence-pip" style={{ '--pip-color': colors[level] || '#718096' }}>
+      <span className="pip-dot" />
+      {level}
+    </span>
+  )
+}

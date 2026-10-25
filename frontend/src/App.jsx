@@ -1,122 +1,84 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useState, useEffect, useRef } from 'react'
+import { gsap } from 'gsap'
+import Header from './components/Header'
+import UploadZone from './components/UploadZone'
+import ProfileCard from './components/ProfileCard'
+import SkillsGrid from './components/SkillsGrid'
 import './App.css'
+import './index.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [profile, setProfile] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const resultRef = useRef(null)
+
+  const handleProfileReceived = (data) => {
+    setProfile(data)
+    if (data && resultRef.current) {
+      // Smooth scroll to results after state update
+      setTimeout(() => {
+        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+    }
+  }
+
+  // Ambient background glow that follows mouse
+  useEffect(() => {
+    const glow = document.querySelector('.ambient-glow')
+    if (!glow) return
+    const onMove = (e) => {
+      gsap.to(glow, {
+        x: e.clientX - 200,
+        y: e.clientY - 200,
+        duration: 1.2,
+        ease: 'power2.out',
+      })
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [])
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      {/* Ambient blob */}
+      <div className="ambient-glow" aria-hidden="true" />
 
-      <div className="ticks"></div>
+      <div className="app-shell">
+        <Header />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <main className="main-content">
+          <div className="hero-text">
+            <h1 className="hero-title">
+              AI-Powered<br />
+              <span className="gradient-text">Resume Profiler</span>
+            </h1>
+            <p className="hero-sub">
+              Upload your resume and let our AI extract your skills, education,
+              and career preferences in seconds.
+            </p>
+          </div>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+          <UploadZone
+            onProfileReceived={handleProfileReceived}
+            isLoading={isLoading}
+            setIsLoading={setIsLoading}
+          />
+
+          {profile && (
+            <div ref={resultRef} className="results-section">
+              <div className="results-divider">
+                <span className="divider-label">Your Profile</span>
+              </div>
+              <ProfileCard profile={profile} />
+              <SkillsGrid skills={profile.skills} />
+            </div>
+          )}
+        </main>
+
+        <footer className="footer">
+          <p>Built with <span className="accent-dot">♥</span> using FastAPI + Gemini AI</p>
+        </footer>
+      </div>
     </>
   )
 }
-
-export default App
