@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>RADIX Talent Check</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <rect width="28" height="28" rx="6" fill="#6366f1"/>
+          <path d="M7 8h7l4 12H11L7 8z" fill="white" opacity="0.9"/>
+          <path d="M14 8h7l-4 12h-7l4-12z" fill="white" opacity="0.5"/>
+        </svg>
+        <span class="brand-name">RADIX <span class="brand-sub">Talent Check</span></span>
+      </div>
+      <nav class="nav">
+        <a href="#assessment" class="nav-link active" data-nav="assessment">Assessment</a>
+        <a href="#results" class="nav-link" data-nav="results">Results</a>
+        <a href="#analysis" class="nav-link" data-nav="analysis">Analysis</a>
+      </nav>
+      <div class="health-indicator" id="healthIndicator">
+        <span class="health-dot" id="healthDot"></span>
+        <span class="health-text" id="healthText">Checking…</span>
+        <button class="icon-btn" id="healthRefresh" title="Refresh health status" aria-label="Refresh API status">↻</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- ═══ SECTION: ASSESSMENT FORM ═══ -->
+    <section id="assessment" class="section active">
+      <div class="section-header">
+        <div>
+          <h1 class="section-title">Candidate Assessment</h1>
+          <p class="section-desc">Evaluates candidate readiness across company skill requirements using deterministic scoring & AI explanation.</p>
+        </div>
+      </div>
+
+      <!-- ─── PROFILE BUILDER INTEGRATION CARD ─── -->
+      <div class="card profile-builder-card" id="profileBuilderCard">
+        <div class="card-header-row">
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <span style="font-size:1.3rem">👤</span>
+            <div>
+              <h2 class="card-title" style="margin:0">Profile Builder Candidate</h2>
+              <span id="pbStatusBadge" class="pb-badge loading">Connecting to Profile Builder...</span>
+            </div>
+          </div>
+          <div class="pb-actions-row" style="margin:0">
+            <input type="file" id="pbFileInput" accept=".json" style="display:none" />
+            <button type="button" class="btn btn-ghost" id="importPbJsonBtn">📥 Import Profile JSON</button>
+            <button type="button" class="btn btn-ghost" id="reloadPbBtn" title="Reload from data/test_candidate_profile.json">🔄 Reload Project Profile</button>
+            <button type="button" class="btn btn-ghost" id="toggleFormDetailsBtn">✏️ View/Edit Details</button>
+          </div>
+        </div>
+
+        <div class="pb-summary-box" id="pbSummaryBox">
+          <div class="pb-cand-header">
+            <div>
+              <span class="pb-cand-name" id="pbCandName">Loading profile...</span>
+              <span class="pb-cand-meta" id="pbCandMeta"></span>
+            </div>
+            <div id="pbAssessedCounts"></div>
+          </div>
+          <div class="pb-chips-row" id="pbChipsRow"></div>
+        </div>
+      </div>
+
+      <form id="assessmentForm" novalidate>
+
+        <!-- Mode selector -->
+        <div class="card mode-card">
+          <h2 class="card-title">Assessment Mode</h2>
+          <div class="mode-grid">
+            <label class="mode-option">
+              <input type="radio" name="mode" value="single" checked />
+              <div class="mode-body">
+                <span class="mode-icon">🏢</span>
+                <span class="mode-label">Single Company</span>
+                <span class="mode-desc">Assess against one company</span>
+              </div>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="mode" value="all" />
+              <div class="mode-body">
+                <span class="mode-icon">🏭</span>
+                <span class="mode-label">All Companies</span>
+                <span class="mode-desc">Compare across every company</span>
+              </div>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="mode" value="single-analyze" />
+              <div class="mode-body">
+                <span class="mode-icon">🔍</span>
+                <span class="mode-label">Single + Analysis</span>
+                <span class="mode-desc">One company with AI analysis</span>
+              </div>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="mode" value="all-analyze" />
+              <div class="mode-body">
+                <span class="mode-icon">✨</span>
+                <span class="mode-label">All + Analysis</span>
+                <span class="mode-desc">Compare all with AI analysis</span>
+              </div>
+            </label>
+          </div>
+
+          <!-- Company selector (dynamically populated from data/company_skillsets.json) -->
+          <div id="companySelector" class="company-selector">
+            <label class="field-label" for="companySelect">Target Company</label>
+            <select id="companySelect" class="field-input">
+              <option value="">Loading companies from data/company_skillsets.json...</option>
+            </select>
+            <p class="field-hint" id="companyHint">Companies are loaded dynamically from <code>data/company_skillsets.json</code>.</p>
+          </div>
+        </div>
+
+        <!-- Candidate details (collapsible, populated automatically from Profile Builder) -->
+        <div class="card hidden" id="candidateDetailsCard">
+          <div class="card-header-row">
+            <div>
+              <h2 class="card-title">Candidate Details (Editable)</h2>
+              <p class="field-hint" style="margin:0">Pre-populated by Profile Builder. You can review or modify skills here.</p>
+            </div>
+            <button type="button" class="btn btn-ghost" id="addSkillBtn">+ Add Skill</button>
+          </div>
+
+          <div class="field-grid">
+            <div class="field-group">
+              <label class="field-label" for="fieldName">Full Name <span class="required">*</span></label>
+              <input type="text" id="fieldName" class="field-input" placeholder="e.g. Ananya Rao" autocomplete="name" />
+              <span class="field-error" id="err-name"></span>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="fieldEmail">Email <span class="required">*</span></label>
+              <input type="email" id="fieldEmail" class="field-input" placeholder="e.g. ananya@example.com" autocomplete="email" />
+              <span class="field-error" id="err-email"></span>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="fieldEducation">Education</label>
+              <input type="text" id="fieldEducation" class="field-input" placeholder="e.g. B.Tech CSE, 2026" />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="fieldRoles">Preferred Roles <span class="field-hint-inline">(comma-separated)</span></label>
+              <input type="text" id="fieldRoles" class="field-input" placeholder="e.g. Software Engineer, Backend Engineer" />
+            </div>
+          </div>
+
+          <div class="field-group" style="margin-top:1rem">
+            <label class="field-label" for="fieldHackathons">Hackathons <span class="field-hint-inline">(one per line)</span></label>
+            <textarea id="fieldHackathons" class="field-input field-textarea" rows="2" placeholder="e.g. Finalist, national-level 24h hackathon — real-time chat backend"></textarea>
+          </div>
+          <div class="field-grid" style="margin-top:1rem">
+            <div class="field-group">
+              <label class="field-label" for="fieldInternships">Internships <span class="field-hint-inline">(one per line)</span></label>
+              <textarea id="fieldInternships" class="field-input field-textarea" rows="2" placeholder="e.g. Summer intern, backend team at a startup"></textarea>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="fieldCertifications">Certifications <span class="field-hint-inline">(one per line)</span></label>
+              <textarea id="fieldCertifications" class="field-input field-textarea" rows="2" placeholder="e.g. AWS Certified Developer"></textarea>
+            </div>
+          </div>
+
+          <!-- Skills list -->
+          <div style="margin-top:1.25rem">
+            <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.5rem">Skills & Evidence</h3>
+            <div id="skillsList"></div>
+            <span class="field-error" id="err-skills"></span>
+          </div>
+        </div>
+
+        <!-- Submit actions -->
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submitBtn">
+            <span id="submitBtnText">Run Talent Check</span>
+            <span id="submitSpinner" class="spinner hidden" aria-hidden="true"></span>
+          </button>
+          <span class="field-error" id="err-global"></span>
+        </div>
+
+      </form>
+    </section>
+
+    <!-- ═══ SECTION: RESULTS ═══ -->
+    <section id="results" class="section">
+      <div class="section-header">
+        <div>
+          <h1 class="section-title">Assessment Results</h1>
+          <p class="section-desc" id="resultsSubtitle"></p>
+        </div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-primary hidden" id="viewAnalysisBtn">✨ View AI Analysis →</button>
+          <button class="btn btn-ghost" id="backToFormBtn">← Back to Assessment</button>
+        </div>
+      </div>
+
+      <!-- Company comparison cards (all-company mode) -->
+      <div id="companyCardsContainer"></div>
+
+      <!-- Single assessment detail -->
+      <div id="singleResultContainer"></div>
+
+      <!-- Analysis prompt/banner on results page -->
+      <div id="resultsAnalysisBannerContainer"></div>
+
+      <!-- Skills table -->
+      <div class="card" id="skillsTableCard">
+        <h2 class="card-title">Skill Detail</h2>
+        <div class="table-scroll">
+          <table class="skills-table" id="skillsTable">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Company</th>
+                <th>Candidate Level</th>
+                <th>Required Level</th>
+                <th>Gap</th>
+                <th>Status</th>
+                <th>Confidence</th>
+              </tr>
+            </thead>
+            <tbody id="skillsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ SECTION: ANALYSIS ═══ -->
+    <section id="analysis" class="section">
+      <div class="section-header">
+        <div>
+          <h1 class="section-title">AI Analysis</h1>
+          <p class="section-desc" id="analysisSubtitle"></p>
+        </div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-ghost" id="backToResultsBtn">← Back to Results</button>
+          <button class="btn btn-ghost" id="backToFormFromAnalysisBtn">Assessment Form</button>
+        </div>
+      </div>
+
+      <!-- Empty state when analysis hasn't been run -->
+      <div id="noAnalysisPlaceholder" class="card empty-state">
+        <div class="empty-state-icon">🤖</div>
+        <h2 style="font-size:1.15rem;font-weight:600;margin-bottom:.5rem;color:var(--text-primary)">No AI Analysis Run Yet</h2>
+        <p class="prose" style="max-width:540px;margin:0 auto 1.5rem">
+          You are currently in assessment-only mode, or haven't run an analysis yet. AI analysis provides candidate overviews, verified strengths, 4-week learning roadmaps, recommended projects, and cross-company visualizations.
+        </p>
+        <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-primary" id="runAnalysisNowBtn">⚡ Run Single + AI Analysis Now</button>
+          <button type="button" class="btn btn-ghost" id="runAllAnalysisNowBtn" style="border-color:var(--border)">✨ Run All Companies + Analysis</button>
+        </div>
+      </div>
+
+      <div id="analysisContentContainer" class="hidden">
+        <!-- AI status banner -->
+        <div id="aiStatusBanner" class="ai-status-banner"></div>
+
+        <!-- Overview -->
+        <div class="card" id="aiOverviewCard">
+          <h2 class="card-title">Overview</h2>
+          <p id="aiOverviewText" class="prose"></p>
+          <p id="aiSummaryText" class="prose summary-text"></p>
+        </div>
+
+        <!-- Charts -->
+        <div class="card">
+          <h2 class="card-title">Visualizations</h2>
+          <div id="chartsContainer" class="charts-container"></div>
+        </div>
+
+        <!-- Skill comparison table -->
+        <div class="card" id="skillComparisonCard">
+          <h2 class="card-title">Skill Comparison Table</h2>
+          <div class="table-scroll" id="skillComparisonTable"></div>
+        </div>
+
+        <!-- Analysis content panels -->
+        <div class="analysis-grid">
+          <div class="card" id="strengthsCard">
+            <h2 class="card-title">✅ Strengths</h2>
+            <ul class="analysis-list" id="strengthsList"></ul>
+          </div>
+          <div class="card" id="improvementsCard">
+            <h2 class="card-title">⚠️ Confirmed Improvement Areas</h2>
+            <ul class="analysis-list" id="improvementsList"></ul>
+          </div>
+        </div>
+
+        <!-- Roadmap -->
+        <div class="card" id="roadmapCard">
+          <h2 class="card-title">📅 Learning Roadmap</h2>
+          <div id="roadmapContainer"></div>
+        </div>
+
+        <!-- Projects -->
+        <div class="card" id="projectsCard">
+          <h2 class="card-title">🛠 Recommended Projects</h2>
+          <div id="projectsContainer"></div>
+        </div>
+
+        <!-- Detailed analysis -->
+        <div class="card" id="detailedCard">
+          <h2 class="card-title">📋 Detailed Analysis</h2>
+          <div id="detailedContainer"></div>
+        </div>
+
+        <!-- Limitations & errors -->
+        <div class="card" id="limitationsCard">
+          <h2 class="card-title">ℹ️ Limitations & Notes</h2>
+          <ul class="limitations-list" id="limitationsList"></ul>
+          <div id="providerErrorsContainer"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

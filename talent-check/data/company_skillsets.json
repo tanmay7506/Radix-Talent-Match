@@ -1,0 +1,47 @@
+
+{
+  "companies": {
+    "Demo Backend Co": {
+      "COD": 8,
+      "DSA": 9,
+      "OOD": 7,
+      "APTI": 7,
+      "COMM": 7,
+      "AI": 6,
+      "CLOUD": 7,
+      "SQL": 8,
+      "SWE": 8,
+      "SYSD": 8,
+      "NETW": 7,
+      "OS": 7
+    },
+    "Demo AI Co": {
+      "COD": 9,
+      "DSA": 9,
+      "OOD": 8,
+      "APTI": 8,
+      "COMM": 7,
+      "AI": 7,
+      "CLOUD": 8,
+      "SQL": 8,
+      "SWE": 9,
+      "SYSD": 9,
+      "NETW": 8,
+      "OS": 8
+    },
+    "Demo Fullstack Co": {
+      "COD": 7,
+      "DSA": 7,
+      "OOD": 6,
+      "APTI": 6,
+      "COMM": 8,
+      "AI": 5,
+      "CLOUD": 6,
+      "SQL": 7,
+      "SWE": 7,
+      "SYSD": 6,
+      "NETW": 6,
+      "OS": 6
+    }
+  }
+}

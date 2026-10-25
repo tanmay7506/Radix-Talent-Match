@@ -1,0 +1,116 @@
+{
+  "name": "Ananya Rao",
+  "email": "not provided",
+  "education": {
+    "degree": "B.Tech",
+    "college": "Not specified",
+    "graducation_year": "2026",
+    "cgpa": 8.6
+  },
+  "skills": [
+    {
+      "skill_name": "Coding",
+      "skill_code": "COD",
+      "skill_level": 9,
+      "evidence": [
+        "Proficient in C++, Python, Java",
+        "Solved 350+ problems on competitive programming platforms",
+        "Built distributed URL-shortening service with Redis-backed cache",
+        "Implemented multithreaded job scheduler in C++",
+        "Designed parking-lot management system in Java"
+      ],
+      "confidence": "High"
+    },
+    {
+      "skill_name": "Data Structures & Algorithms",
+      "skill_code": "DSA",
+      "skill_level": 9,
+      "evidence": [
+        "Solved 350+ competitive programming problems",
+        "Mentors juniors on DSA through college coding club",
+        "Applied DSA in capstone distributed systems project",
+        "Implemented OS scheduling algorithms (Round Robin, Priority, SJF)"
+      ],
+      "confidence": "High"
+    },
+    {
+      "skill_name": "Object-Oriented Design",
+      "skill_code": "OOD",
+      "skill_level": 8,
+      "evidence": [
+        "Designed parking-lot management system using Factory and Strategy patterns",
+        "Applied OOP principles in Java projects",
+        "Used design patterns in capstone project"
+      ],
+      "confidence": "High"
+    },
+    {
+      "skill_name": "Operating Systems",
+      "skill_code": "OS",
+      "skill_level": 8,
+      "evidence": [
+        "Implemented multithreaded job scheduler simulating OS scheduling algorithms",
+        "Strong coursework in Operating Systems",
+        "Applied OS concepts in distributed systems project"
+      ],
+      "confidence": "High"
+    },
+    {
+      "skill_name": "Networking",
+      "skill_code": "NET",
+      "skill_level": 7,
+      "evidence": [
+        "Coursework in Computer Networks",
+        "Built distributed URL-shortening service with horizontally-scalable API layer",
+        "Real-time chat backend at hackathon"
+      ],
+      "confidence": "Medium"
+    },
+    {
+      "skill_name": "System Design",
+      "skill_code": "SYS",
+      "skill_level": 8,
+      "evidence": [
+        "Built distributed URL-shortening service with Redis cache and horizontally-scalable API",
+        "Designed rate-limiter shipped to production during internship",
+        "Real-time chat backend architecture"
+      ],
+      "confidence": "High"
+    },
+    {
+      "skill_name": "Software Engineering",
+      "skill_code": "SWE",
+      "skill_level": 8,
+      "evidence": [
+        "Summer intern at backend team of mid-size product startup",
+        "Shipped rate-limiter used in production",
+        "Proficient in Git, Linux",
+        "Built real-time chat backend at national-level hackathon"
+      ],
+      "confidence": "High"
+    },
+    {
+      "skill_name": "Communication",
+      "skill_code": "COM",
+      "skill_level": 7,
+      "evidence": [
+        "Mentors juniors on DSA through college coding club",
+        "Collaborated in hackathon team",
+        "Worked in backend team during internship"
+      ],
+      "confidence": "Medium"
+    }
+  ],
+  "hackathons": [
+    "Finalist, national-level 24-hour hackathon — built a real-time chat backend"
+  ],
+  "internships": [
+    "Summer intern, backend team at a mid-size product startup — shipped a rate-limiter used in production"
+  ],
+  "certifications": [],
+  "preferred_roles": [
+    "Software Engineer",
+    "Backend Engineer"
+  ],
+  "cv_file": "not provided"
+}
