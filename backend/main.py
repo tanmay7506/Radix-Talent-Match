@@ -1,17 +1,15 @@
 import dotenv
-from fastapi import FastAPI
 
 dotenv.load_dotenv()
-from functions.profile_builder import extract_Data, parse_pdf
+
+from fastapi import FastAPI
+from routers.profile_builder import profile_builder_router
+
 
 app = FastAPI()
+app.include_router(profile_builder_router)
 
 
 @app.get("/")
 def read_root():
-    data = extract_Data(
-        parse_pdf(
-            "/home/sarthak/dev/Radix-Talent-Match/backend/files/Resumes/PDF/Ananya Rao.pdf"
-        )
-    )
-    return {"status": "success", "Parsed": data.model_dump()}
+    return {"status": "success", "Running": True}
