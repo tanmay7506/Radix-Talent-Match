@@ -29,7 +29,7 @@ def parse_document(file_content: bytes, filename: str) -> str:
     else:
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported.")
 
-@app.post("/api/v1/extract-skills", response_model=SkillExtractionOutput)
+@app.post("/api/extract-skills", response_model=SkillExtractionOutput)
 async def extract_skills(file: UploadFile = File(...)):
     # Read the uploaded file 
     content = await file.read()
