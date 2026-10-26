@@ -15,7 +15,9 @@ def parse_document(file_content: bytes, filename: str) -> str:
     elif filename.lower().endswith(".docx"):
         doc = docx.Document(io.BytesIO(file_content))
         return " ".join([para.text for para in doc.paragraphs])
+    elif filename.lower().endswith((".txt", ".md")):
+        return file_content.decode("utf-8", errors="ignore")
     else:
         raise HTTPException(
-            status_code=400, detail="Only PDF and DOCX files are supported."
+            status_code=400, detail="Only PDF, DOCX, and TXT files are supported."
         )

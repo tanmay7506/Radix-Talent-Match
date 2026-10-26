@@ -1,54 +1,145 @@
-import { useEffect, useRef } from 'react'
-import { gsap } from 'gsap'
-import './Header.css'
+import React from 'react';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 
 export default function Header() {
-  const logoRef = useRef(null)
-  const navRef = useRef(null)
-  const titleRef = useRef(null)
-
-  useEffect(() => {
-    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
-    tl.fromTo(logoRef.current,
-      { opacity: 0, y: -20, scale: 0.8 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.7 }
-    )
-    .fromTo(titleRef.current,
-      { opacity: 0, y: -12 },
-      { opacity: 1, y: 0, duration: 0.6 },
-      '-=0.4'
-    )
-    .fromTo(navRef.current.children,
-      { opacity: 0, y: -10 },
-      { opacity: 1, y: 0, stagger: 0.1, duration: 0.5 },
-      '-=0.4'
-    )
-  }, [])
+  const navigate = useNavigate();
 
   return (
-    <header className="header neo-card">
-      <div className="header-brand">
-        <div className="header-logo" ref={logoRef}>
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <circle cx="16" cy="16" r="16" fill="url(#logoGrad)" />
-            <path d="M10 20 L16 12 L22 20" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-            <circle cx="16" cy="22" r="1.8" fill="#fff" />
-            <defs>
-              <linearGradient id="logoGrad" x1="0" y1="0" x2="32" y2="32">
-                <stop stopColor="#6c63ff" />
-                <stop offset="1" stopColor="#9b8fff" />
-              </linearGradient>
-            </defs>
-          </svg>
+    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#262626]">
+      <div className="h-16 w-full px-6 lg:px-12 flex items-center justify-between">
+        {/* Brand & Nav */}
+        <div className="flex items-center gap-10">
+          <Link
+            to="/"
+            className="flex items-center gap-1.5 text-white tracking-widest uppercase hover:opacity-90 transition-opacity"
+          >
+            <span className="text-lg tracking-[0.22em] font-bold text-white">ALOHOMORA</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#e50914] inline-block mb-1"></span>
+          </Link>
+
+          <nav className="hidden xl:flex items-center gap-6">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors py-2 ${
+                  isActive
+                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A3A3A3] hover:text-white'
+                }`
+              }
+            >
+              Home
+            </NavLink>
+
+            <NavLink
+              to="/jd-intelligence"
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors py-2 ${
+                  isActive
+                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A3A3A3] hover:text-white'
+                }`
+              }
+            >
+              JD Intelligence
+            </NavLink>
+
+            <NavLink
+              to="/resume-intelligence"
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors py-2 ${
+                  isActive
+                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A3A3A3] hover:text-white'
+                }`
+              }
+            >
+              Resume Intelligence
+            </NavLink>
+
+            <NavLink
+              to="/candidates"
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors py-2 ${
+                  isActive
+                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A3A3A3] hover:text-white'
+                }`
+              }
+            >
+              Candidates
+            </NavLink>
+
+            <NavLink
+              to="/skill-match"
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors py-2 ${
+                  isActive
+                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A3A3A3] hover:text-white'
+                }`
+              }
+            >
+              Skill Match
+            </NavLink>
+
+            <NavLink
+              to="/talent-readiness"
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors py-2 ${
+                  isActive
+                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A3A3A3] hover:text-white'
+                }`
+              }
+            >
+              Talent Readiness
+            </NavLink>
+
+            <NavLink
+              to="/history"
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors py-2 ${
+                  isActive
+                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A3A3A3] hover:text-white'
+                }`
+              }
+            >
+              History
+            </NavLink>
+          </nav>
         </div>
-        <span className="header-title" ref={titleRef}>ResumeAI</span>
+
+        {/* Right Tools */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate('/candidates')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414] border border-[#262626] text-[#737373] hover:text-white hover:border-[#3a3939] transition-all cursor-pointer"
+            type="button"
+          >
+            <span className="material-symbols-outlined text-[16px]">search</span>
+            <span className="text-xs hidden sm:inline tracking-wider uppercase font-medium">Telemetry Search</span>
+            <kbd className="hidden md:inline text-[10px] px-1.5 py-0.5 rounded bg-[#0A0A0A] text-[#737373] border border-[#262626]">⌘K</kbd>
+          </button>
+
+          <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414] border border-[#262626]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-xs text-[#A3A3A3]">Active Session</span>
+          </div>
+
+          <div className="flex items-center gap-2 pl-2 border-l border-[#262626]">
+            <div className="hidden sm:flex flex-col text-right">
+              <span className="text-xs text-white font-medium">Talent Ops</span>
+              <span className="text-[10px] text-[#737373] uppercase tracking-wider">Executive</span>
+            </div>
+            <div className="w-8 h-8 rounded bg-[#ffb4aa] flex items-center justify-center font-bold text-[#690003] text-xs">
+              TO
+            </div>
+          </div>
+        </div>
       </div>
-      <nav className="header-nav" ref={navRef}>
-        <a href="#upload" className="nav-link">Upload</a>
-        <a href="#profile" className="nav-link">Profile</a>
-        <a href="#skills" className="nav-link">Skills</a>
-        <a href="#talent-check" className="nav-link">Talent Check</a>
-      </nav>
     </header>
-  )
+  );
 }

@@ -9,7 +9,7 @@ from routers.profile_builder import profile_builder_router
 from routers.talent_check import talent_check_router
 
 
-app = FastAPI(title="RADIX Talent Match API")
+app = FastAPI(title="Alohomora Talent Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,

@@ -34,6 +34,16 @@ CATEGORY_ALIASES = {
     "net": "NETW",
     "sys": "SYSD",
     "com": "COMM",
+    "db": "SQL",
+    "database": "SQL",
+    "databases": "SQL",
+    "devops": "SWE",
+    "test": "SWE",
+    "testing": "SWE",
+    "sec": "OTHER",
+    "security": "OTHER",
+    "apt": "APTI",
+    "cld": "CLOUD",
 }
 
 
