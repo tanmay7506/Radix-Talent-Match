@@ -1,3 +1,6 @@
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -19,6 +22,11 @@ SkillCode = Literal[
     "OS",
     "OTH",
 ]
+
+MODEL_EXECUTOR = ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="model-call",
+)
 
 SKILL_CODES: dict[str, SkillCode] = {
     "Coding": "COD",
@@ -51,7 +59,7 @@ class Skill(BaseModel):
         "System Design",
         "Networking",
         "Operating Systems",
-        "Outside These Category",
+        "other",
     ]
     skill_code: SkillCode
     skill_level: int = Field(ge=1, le=10)
@@ -90,7 +98,15 @@ async def extract_data[T: BaseModel](
     structured_model = model_genai.with_structured_output(pydantic_model)
     parsed_prompt = ChatPromptTemplate.from_template(prompt)
     pipeline = parsed_prompt | structured_model
-    data = pipeline.invoke({"data": data_dump})
+    loop = asyncio.get_running_loop()
+    invocation = loop.run_in_executor(
+        MODEL_EXECUTOR,
+        partial(pipeline.invoke, {"data": data_dump}),
+    )
+    data = await asyncio.wait_for(
+        invocation,
+        timeout=90,
+    )
     parsed_model = pydantic_model.model_validate(data)
     if isinstance(parsed_model, ProfileResponseModel):
         return map_skill_metadata(parsed_model)
