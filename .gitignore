@@ -20,3 +20,8 @@ backend/dist/
 
 .DS_Store
 Thumbs.db
+
+skill-lock*
+.agents/
+
+BACKEND_INTEGRATION.md
