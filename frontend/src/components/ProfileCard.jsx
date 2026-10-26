@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
+import { GraduationCap, Briefcase, Building2, Zap, Award } from 'lucide-react'
 import './ProfileCard.css'
 
 export default function ProfileCard({ profile }) {
   const cardRef = useRef(null)
   const avatarRef = useRef(null)
 
+  // ── Preserved GSAP animation on profile card entrance ───────────────────
   useEffect(() => {
     if (!profile) return
     const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
@@ -48,7 +50,7 @@ export default function ProfileCard({ profile }) {
 
       <div className="profile-body">
         {profile.education && (
-          <InfoRow icon="🎓" label="Education">
+          <InfoRow icon={<GraduationCap size={15} strokeWidth={2} />} label="Education">
             <strong>{profile.education.degree}</strong>
             <span className="info-sub">{profile.education.college} · {profile.education.graducation_year}</span>
             {profile.education.cgpa && (
@@ -58,7 +60,7 @@ export default function ProfileCard({ profile }) {
         )}
 
         {profile.preferred_roles?.length > 0 && (
-          <InfoRow icon="💼" label="Preferred Roles">
+          <InfoRow icon={<Briefcase size={15} strokeWidth={2} />} label="Preferred Roles">
             <div className="tag-list">
               {profile.preferred_roles.map((r, i) => (
                 <span key={i} className="tag neo-inset">{r}</span>
@@ -68,7 +70,7 @@ export default function ProfileCard({ profile }) {
         )}
 
         {profile.internships?.length > 0 && (
-          <InfoRow icon="🏢" label="Internships">
+          <InfoRow icon={<Building2 size={15} strokeWidth={2} />} label="Internships">
             <ul className="bullet-list">
               {profile.internships.map((s, i) => <li key={i}>{s}</li>)}
             </ul>
@@ -76,7 +78,7 @@ export default function ProfileCard({ profile }) {
         )}
 
         {profile.hackathons?.length > 0 && (
-          <InfoRow icon="⚡" label="Hackathons">
+          <InfoRow icon={<Zap size={15} strokeWidth={2} />} label="Hackathons">
             <ul className="bullet-list">
               {profile.hackathons.map((h, i) => <li key={i}>{h}</li>)}
             </ul>
@@ -84,7 +86,7 @@ export default function ProfileCard({ profile }) {
         )}
 
         {profile.certifications?.length > 0 && (
-          <InfoRow icon="🏅" label="Certifications">
+          <InfoRow icon={<Award size={15} strokeWidth={2} />} label="Certifications">
             <div className="tag-list">
               {profile.certifications.map((c, i) => (
                 <span key={i} className="tag neo-inset">{c}</span>

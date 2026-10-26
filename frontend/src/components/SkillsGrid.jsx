@@ -1,26 +1,42 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
+import {
+  Code2,
+  GitBranch,
+  Boxes,
+  Brain,
+  MessageSquare,
+  Cpu,
+  Cloud,
+  Database,
+  Terminal,
+  Server,
+  Network,
+  Laptop,
+  Sparkles,
+} from 'lucide-react'
 import './SkillsGrid.css'
 
 const SKILL_META = {
-  COD: { icon: '⌨️', color: '#6c63ff' },
-  DSA: { icon: '🌳', color: '#38b2ac' },
-  OOD: { icon: '🏗️', color: '#805ad5' },
-  APT: { icon: '🧠', color: '#d69e2e' },
-  COM: { icon: '💬', color: '#38a169' },
-  AI:  { icon: '🤖', color: '#e53e3e' },
-  CLD: { icon: '☁️', color: '#3182ce' },
-  SQL: { icon: '🗄️', color: '#dd6b20' },
-  SWE: { icon: '⚙️', color: '#6c63ff' },
-  SYS: { icon: '🔧', color: '#d53f8c' },
-  NET: { icon: '🌐', color: '#319795' },
-  OS:  { icon: '💻', color: '#744210' },
-  OTH: { icon: '✦',  color: '#718096' },
+  COD: { Icon: Code2 },
+  DSA: { Icon: GitBranch },
+  OOD: { Icon: Boxes },
+  APT: { Icon: Brain },
+  COM: { Icon: MessageSquare },
+  AI:  { Icon: Cpu },
+  CLD: { Icon: Cloud },
+  SQL: { Icon: Database },
+  SWE: { Icon: Terminal },
+  SYS: { Icon: Server },
+  NET: { Icon: Network },
+  OS:  { Icon: Laptop },
+  OTH: { Icon: Sparkles },
 }
 
 export default function SkillsGrid({ skills }) {
   const gridRef = useRef(null)
 
+  // ── Preserved GSAP animation on skills entrance and progress bars ────────
   useEffect(() => {
     if (!skills?.length) return
     gsap.fromTo(
@@ -70,7 +86,7 @@ function SkillCard({ skill }) {
   const handleMouseEnter = () => {
     gsap.to(cardRef.current, {
       y: -4,
-      boxShadow: `10px 10px 24px var(--neo-dark), -10px -10px 24px var(--neo-light)`,
+      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.55)',
       duration: 0.3,
       ease: 'power2.out',
     })
@@ -79,7 +95,7 @@ function SkillCard({ skill }) {
   const handleMouseLeave = () => {
     gsap.to(cardRef.current, {
       y: 0,
-      boxShadow: `var(--neo-shadow)`,
+      boxShadow: 'var(--neo-shadow)',
       duration: 0.3,
       ease: 'power2.out',
     })
@@ -93,11 +109,11 @@ function SkillCard({ skill }) {
       onMouseLeave={handleMouseLeave}
     >
       <div className="skill-top">
-        <div className="skill-icon" style={{ '--skill-color': meta.color }}>
-          <span>{meta.icon}</span>
+        <div className="skill-icon">
+          <meta.Icon size={18} strokeWidth={2} />
         </div>
         <div className="skill-level-badge neo-inset">
-          <span style={{ color: meta.color }}>{skill.skill_level}</span>
+          <span>{skill.skill_level}</span>
           <span className="skill-level-max">/10</span>
         </div>
       </div>
@@ -108,7 +124,7 @@ function SkillCard({ skill }) {
         <div
           className="skill-fill"
           data-level={levelPct}
-          style={{ '--fill-color': meta.color, width: '0%' }}
+          style={{ width: '0%' }}
         />
       </div>
 
@@ -134,9 +150,9 @@ function SkillCard({ skill }) {
 }
 
 function ConfidencePip({ level }) {
-  const colors = { High: '#48bb78', Medium: '#ed8936', Low: '#fc8181' }
+  const colors = { High: '#EDEDED', Medium: '#5e5e5e', Low: '#707070' }
   return (
-    <span className="confidence-pip" style={{ '--pip-color': colors[level] || '#718096' }}>
+    <span className="confidence-pip" style={{ '--pip-color': colors[level] || '#5e5e5e' }}>
       <span className="pip-dot" />
       {level}
     </span>

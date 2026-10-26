@@ -1,95 +1,101 @@
+/* ─── Upload Zone – Two-Color Theme (#131314 Primary, #5e5e5e Secondary) ── */
 .upload-zone {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding: 56px 40px;
-  margin-top: 32px;
+  gap: 16px;
+  padding: 44px 32px;
   cursor: pointer;
-  border-radius: var(--radius-lg);
-  border: 2px dashed transparent;
-  transition:
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
   user-select: none;
+  transition: all 0.25s ease;
+  border: 1.5px dashed var(--border);
+  outline: none;
+  background: var(--surface);
+  border-radius: var(--radius);
 }
 
 .upload-zone:hover,
 .upload-zone:focus-visible {
-  border-color: var(--accent);
-  box-shadow:
-    8px 8px 16px var(--neo-dark),
-    -8px -8px 16px var(--neo-light),
-    0 0 0 1px var(--accent-glow);
-  outline: none;
+  border-color: var(--color-secondary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .upload-zone.dragging {
-  border-color: var(--accent);
-  box-shadow:
-    var(--neo-shadow-inset),
-    0 0 0 2px var(--accent);
+  border-color: var(--color-secondary);
+  background: rgba(94, 94, 94, 0.12);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
 }
 
+/* ─── Icon container ────────────────────────────────────────────────────── */
 .upload-icon {
   display: flex;
   align-items: center;
   justify-content: center;
+  will-change: transform;
 }
 
+.upload-icon-circle {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(94, 94, 94, 0.16);
+  border: 1px solid var(--border);
+  color: #EDEDED;
+  transition: all 0.2s ease;
+}
+
+.upload-zone:hover .upload-icon-circle {
+  border-color: var(--color-secondary);
+  color: #FFFFFF;
+}
+
+/* ─── Text ──────────────────────────────────────────────────────────────── */
 .upload-text {
   text-align: center;
 }
 
 .upload-text h3 {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-h);
   margin-bottom: 6px;
 }
 
 .upload-text p {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
+/* ─── Error ─────────────────────────────────────────────────────────────── */
 .upload-error {
-  color: var(--error);
   font-size: 13px;
-  font-weight: 500;
-  padding: 10px 20px;
+  color: #FFFFFF;
+  background: rgba(94, 94, 94, 0.25);
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
-  box-shadow: var(--neo-shadow-inset);
-  background: rgba(252, 129, 129, 0.08);
+  border: 1px solid var(--color-secondary);
 }
 
+/* ─── Format badges ─────────────────────────────────────────────────────── */
 .upload-formats {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .format-badge {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--accent);
   letter-spacing: 0.5px;
-  padding: 6px 14px;
+  padding: 5px 12px;
+  color: var(--text-muted);
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0,0,0,0);
-  white-space: nowrap;
-}
-
-/* Spinner animation */
+/* ─── Spinner ────────────────────────────────────────────────────────────── */
 .spinner {
   animation: spin 1s linear infinite;
-  transform-origin: center;
 }
 
 @keyframes spin {

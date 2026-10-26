@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
+import { UploadCloud } from 'lucide-react'
 import './UploadZone.css'
 
 export default function UploadZone({ onProfileReceived, isLoading, setIsLoading }) {
@@ -10,6 +11,7 @@ export default function UploadZone({ onProfileReceived, isLoading, setIsLoading 
   const [fileName, setFileName] = useState(null)
   const [error, setError] = useState(null)
 
+  // ── Preserved GSAP entrance and floating icon animation ─────────────────
   useEffect(() => {
     gsap.fromTo(cardRef.current,
       { opacity: 0, y: 40, scale: 0.95 },
@@ -49,20 +51,17 @@ export default function UploadZone({ onProfileReceived, isLoading, setIsLoading 
     formData.append('file', file)
 
     try {
-      const res = await fetch('/profile/build/from-resume', {
+      const res = await fetch('http://localhost:8000/profile/build/from-resume', {
         method: 'POST',
         body: formData,
       })
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Server error')
+        throw new Error(`Server returned ${res.status}: ${res.statusText}`)
       }
       const data = await res.json()
       onProfileReceived(data)
-    } catch (e) {
-      setError(e.message || 'Failed to build profile. Please try again.')
-      onProfileReceived(null)
-    } finally {
+    } catch (err) {
+      setError(`Failed to extract profile: ${err.message}`)
       setIsLoading(false)
     }
   }
@@ -70,25 +69,28 @@ export default function UploadZone({ onProfileReceived, isLoading, setIsLoading 
   const onDrop = (e) => {
     e.preventDefault()
     setDragging(false)
-    const file = e.dataTransfer.files[0]
+    const file = e.dataTransfer?.files?.[0]
     handleFile(file)
   }
 
-  const onDragOver = (e) => { e.preventDefault(); setDragging(true) }
-  const onDragLeave = () => setDragging(false)
-  const onInputChange = (e) => handleFile(e.target.files[0])
+  const onInputChange = (e) => {
+    const file = e.target.files?.[0]
+    handleFile(file)
+  }
 
   return (
-    <section id="upload" className={`upload-zone neo-card ${dragging ? 'dragging' : ''}`}
+    <section
+      id="upload"
+      className={`upload-zone neo-card${dragging ? ' dragging' : ''}`}
       ref={cardRef}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+      onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onClick={() => !isLoading && inputRef.current.click()}
+      onClick={() => inputRef.current?.click()}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && inputRef.current.click()}
-      aria-label="Upload resume"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
+      aria-label="Upload resume: click or drag and drop a PDF or DOCX file"
     >
       <input
         ref={inputRef}
@@ -103,11 +105,9 @@ export default function UploadZone({ onProfileReceived, isLoading, setIsLoading 
         {isLoading ? (
           <Spinner />
         ) : (
-          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-            <circle cx="28" cy="28" r="28" fill="var(--accent-light)" />
-            <path d="M28 38V26M28 26L23 31M28 26L33 31" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-            <rect x="18" y="38" width="20" height="2.5" rx="1.25" fill="var(--accent)" opacity="0.5"/>
-          </svg>
+          <div className="upload-icon-circle">
+            <UploadCloud size={28} strokeWidth={1.8} />
+          </div>
         )}
       </div>
 
@@ -143,8 +143,8 @@ export default function UploadZone({ onProfileReceived, isLoading, setIsLoading 
 function Spinner() {
   return (
     <svg width="56" height="56" viewBox="0 0 56 56" fill="none" className="spinner">
-      <circle cx="28" cy="28" r="22" stroke="var(--accent-light)" strokeWidth="4" />
-      <path d="M28 6 A22 22 0 0 1 50 28" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round" />
+      <circle cx="28" cy="28" r="22" stroke="var(--border)" strokeWidth="4" />
+      <path d="M28 6 A22 22 0 0 1 50 28" stroke="var(--color-secondary)" strokeWidth="4" strokeLinecap="round" />
     </svg>
   )
 }
