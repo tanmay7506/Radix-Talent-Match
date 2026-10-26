@@ -19,10 +19,11 @@
   border: 2px dashed var(--border);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
   outline: none;
   user-select: none;
   min-height: 190px;
+  min-width: 0;
 }
 
 .ui-upload-zone:hover {
@@ -40,7 +41,7 @@
 .ui-upload-dragging {
   border-color: #EDEDED;
   background: rgba(94, 94, 94, 0.22);
-  transform: scale(1.01);
+  box-shadow: var(--shadow-md);
 }
 
 .ui-upload-loading {
@@ -65,7 +66,7 @@
   justify-content: center;
   color: #EDEDED;
   margin-bottom: var(--space-3);
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .ui-upload-compact .ui-upload-icon-wrap {
@@ -91,7 +92,10 @@
   font-weight: var(--weight-bold);
   color: var(--text-h);
   word-break: break-word;
+  overflow-wrap:anywhere;
 }
+@media(max-width:420px){.ui-upload-zone{padding:var(--space-6) var(--space-4);min-height:170px}.ui-upload-filename-pill{max-width:100%}}
+@media(prefers-reduced-motion:reduce){.ui-upload-zone,.ui-upload-icon-wrap{transition:none}}
 
 .ui-upload-subtitle {
   font-size: var(--text-xs);

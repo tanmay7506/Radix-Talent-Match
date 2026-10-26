@@ -4,8 +4,8 @@
   width: 100%;
   margin-bottom: var(--space-8);
   padding: var(--space-4) var(--space-6);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: linear-gradient(110deg, rgba(151, 165, 177, 0.07), transparent 42%), var(--surface);
+  border: 1px solid rgba(151, 165, 177, 0.24);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
@@ -66,8 +66,8 @@
 
 /* Pending step */
 .wizard-step-pending .wizard-step-indicator {
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
+  background: rgba(151, 165, 177, 0.08);
+  border: 1px solid rgba(151, 165, 177, 0.22);
   color: var(--text-dim);
 }
 
@@ -82,10 +82,10 @@
 
 /* Current step */
 .wizard-step-current .wizard-step-indicator {
-  background: var(--color-secondary);
-  border: 1.5px solid #FFFFFF;
+  background: #697985;
+  border: 1.5px solid #aebbc3;
   color: #FFFFFF;
-  box-shadow: 0 0 12px rgba(94, 94, 94, 0.45);
+  box-shadow: 0 0 0 4px rgba(151, 165, 177, 0.11), 0 4px 12px rgba(0, 0, 0, 0.28);
 }
 
 .wizard-step-current .wizard-step-title {
@@ -95,13 +95,13 @@
 
 /* Completed step */
 .wizard-step-completed .wizard-step-indicator {
-  background: rgba(94, 94, 94, 0.35);
-  border: 1px solid var(--color-secondary);
-  color: #EDEDED;
+  background: rgba(151, 165, 177, 0.19);
+  border: 1px solid rgba(151, 165, 177, 0.43);
+  color: #dce3e7;
 }
 
 .wizard-step-completed .wizard-step-btn:hover {
-  background: rgba(94, 94, 94, 0.12);
+  background: rgba(151, 165, 177, 0.1);
 }
 
 .wizard-step-completed .wizard-step-title {
@@ -138,7 +138,7 @@
 }
 
 .wizard-step-connector.connector-completed {
-  background: var(--color-secondary);
+  background: #697985;
 }
 
 /* ─── Responsive Stepper ────────────────────────────────────────────────── */

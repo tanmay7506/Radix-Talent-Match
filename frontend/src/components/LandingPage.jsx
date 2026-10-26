@@ -8,6 +8,7 @@ import {
   Target,
   Check,
   ArrowRight,
+  Clock3,
 } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Badge } from './ui/Badge'
@@ -38,6 +39,11 @@ const FEATURES = [
     Icon: Target,
     title: 'Skill Gap Identification',
     desc: 'See exactly which skills you match, which are missing, and get actionable recommendations to close the gap.',
+  },
+  {
+    Icon: Clock3,
+    title: 'Match History',
+    desc: 'Return to previous role assessments and review saved scores, skill gaps, and recommendations.',
   },
 ]
 
@@ -209,8 +215,8 @@ export default function LandingPage({ onNavigate }) {
           <div className="stat-label">RADIX Skill Categories</div>
         </div>
         <div className="stat-card" role="listitem">
-          <div className="stat-num">2</div>
-          <div className="stat-label">Active API Endpoints</div>
+          <div className="stat-num">4</div>
+          <div className="stat-label">Steps to a Skill Match</div>
         </div>
         <div className="stat-card" role="listitem">
           <div className="stat-num">AI</div>
@@ -270,9 +276,9 @@ export default function LandingPage({ onNavigate }) {
             id="cta-strip-resume"
             variant="ghost"
             size="lg"
-            onClick={() => onNavigate('resume')}
+            onClick={() => onNavigate('profile')}
           >
-            Parse a Resume
+            Build Your Profile
           </Button>
         </div>
       </div>

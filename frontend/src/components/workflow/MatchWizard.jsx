@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../services/api'
+import { profileService } from '../../services/profileService'
+import { resultsService } from '../../services/resultsService'
 import { PageHeader } from '../ui/PageHeader'
 import { WizardStepper } from './WizardStepper'
 import { Step1Resume } from './Step1Resume'
@@ -17,8 +19,8 @@ export function MatchWizard({
   onJdSynced,
   onNavigate,
 }) {
-  const [currentStep, setCurrentStep] = useState(() => (initialProfile ? 2 : 1))
-  const [maxStepReached, setMaxStepReached] = useState(() => (initialProfile ? 2 : 1))
+  const [currentStep, setCurrentStep] = useState(1)
+  const [maxStepReached, setMaxStepReached] = useState(1)
 
   // ── Step 1 State: Resume ────────────────────────────────────────────────
   const [resumeFile, setResumeFile] = useState(null)
@@ -44,6 +46,17 @@ export function MatchWizard({
   const [matchResult, setMatchResult] = useState(null)
   const [isMatching, setIsMatching] = useState(false)
   const [matchingError, setMatchingError] = useState(null)
+  const [profilePersistenceWarning, setProfilePersistenceWarning] = useState('')
+  const savedResultRef = useRef(null)
+  const controllersRef = useRef({})
+  useEffect(() => () => Object.values(controllersRef.current).forEach((controller) => controller.abort()), [])
+
+  const handleUseSavedProfile = () => {
+    if (!initialProfile) return
+    const profile = JSON.parse(JSON.stringify(initialProfile))
+    setOriginalProfile(profile); setEditedProfile(profile); setIsProfileEdited(false)
+    setMatchResult(null); setMaxStepReached((prev) => Math.max(prev, 2)); goToStep(2)
+  }
 
   // ── Navigation between steps ────────────────────────────────────────────
   const goToStep = (stepNumber) => {
@@ -56,9 +69,12 @@ export function MatchWizard({
     if (!file || isUploadingResume) return
     setResumeError(null)
     setIsUploadingResume(true)
+    const controller = new AbortController()
+    controllersRef.current.resume?.abort()
+    controllersRef.current.resume = controller
 
     try {
-      const data = await api.buildProfileFromResume(file)
+      const data = await api.buildProfileFromResume(file, { signal: controller.signal })
       // Save original immutable profile + editable draft
       setOriginalProfile(JSON.parse(JSON.stringify(data)))
       setEditedProfile(JSON.parse(JSON.stringify(data)))
@@ -73,9 +89,10 @@ export function MatchWizard({
       setMaxStepReached((prev) => Math.max(prev, 2))
       goToStep(2)
     } catch (err) {
-      setResumeError(err.message || 'Failed to extract candidate profile.')
+      if (err.name !== 'AbortError') setResumeError(err.message || 'Failed to extract candidate profile.')
     } finally {
-      setIsUploadingResume(false)
+      if (!controller.signal.aborted) setIsUploadingResume(false)
+      if (controllersRef.current.resume === controller) delete controllersRef.current.resume
     }
   }
 
@@ -98,6 +115,23 @@ export function MatchWizard({
     // Invalidate downstream match since profile requirements changed
     setMatchResult(null)
     if (onProfileSynced) onProfileSynced(updatedProfile)
+  }
+
+  const handleConfirmProfile = async (reviewedProfile = editedProfile) => {
+    if (!reviewedProfile) return
+    try {
+      const saved = await profileService.saveProfile(reviewedProfile)
+      setOriginalProfile(saved); setEditedProfile(saved)
+      setProfilePersistenceWarning('')
+      if (onProfileSynced) onProfileSynced(saved)
+    } catch (err) {
+      // Matching can continue with the explicitly reviewed in-memory draft.
+      // Saving remains available from the Profile page after backend setup.
+      setOriginalProfile(reviewedProfile); setEditedProfile(reviewedProfile)
+      if (onProfileSynced) onProfileSynced(reviewedProfile)
+      setProfilePersistenceWarning(`Your reviewed profile could not be saved. This match will use the reviewed draft. ${err.message}`)
+    }
+    setMaxStepReached((prev) => Math.max(prev, 3)); goToStep(3)
   }
 
   const handleResetOriginalProfile = () => {
@@ -123,13 +157,16 @@ export function MatchWizard({
     if (isAnalyzingJd) return
     setJdError(null)
     setIsAnalyzingJd(true)
+    const controller = new AbortController()
+    controllersRef.current.jd?.abort()
+    controllersRef.current.jd = controller
 
     try {
       let data = null
       if (mode === 'text') {
-        data = await api.extractJdSkillsFromText(text)
+        data = await api.extractJdSkillsFromText(text, { signal: controller.signal })
       } else {
-        data = await api.extractJdSkills(file)
+        data = await api.extractJdSkills(file, { signal: controller.signal })
       }
 
       setJdData(data)
@@ -139,10 +176,11 @@ export function MatchWizard({
       setMaxStepReached((prev) => Math.max(prev, 4))
       goToStep(4)
     } catch (err) {
-      setJdError(err.message || 'Failed to parse job description.')
+      if (err.name !== 'AbortError') setJdError(err.message || 'Failed to parse job description.')
       // Stay on step 3 to show error and allow quick correction
     } finally {
-      setIsAnalyzingJd(false)
+      if (!controller.signal.aborted) setIsAnalyzingJd(false)
+      if (controllersRef.current.jd === controller) delete controllersRef.current.jd
     }
   }
 
@@ -153,22 +191,38 @@ export function MatchWizard({
 
     setMatchingError(null)
     setIsMatching(true)
+    const controller = new AbortController()
+    controllersRef.current.match?.abort()
+    controllersRef.current.match = controller
 
     try {
       const result = await api.analyzeSkillMatch({
         candidateProfile,
         jdSkills: jdData,
         jdSourceFile: jdFile ? jdFile.name : 'Pasted Job Description',
-      })
+      }, { signal: controller.signal })
 
       setMatchResult(result)
+      if (savedResultRef.current !== result) {
+        savedResultRef.current = result
+        resultsService.saveResult({
+          matchResult: result,
+          profile: candidateProfile,
+          job_title: jdData?.job_title || jdData?.jobTitle,
+          company: jdData?.company || jdData?.company_name,
+          location: jdData?.location,
+          employment_type: jdData?.employment_type,
+          job_description: jdData?.description_text || jdData?.job_description,
+        }).catch(() => {})
+      }
       setMaxStepReached((prev) => Math.max(prev, 6))
       // Automatic smooth progression to results view
       goToStep(6)
     } catch (err) {
-      setMatchingError(err.message || 'Failed to calculate role alignment.')
+      if (err.name !== 'AbortError') setMatchingError(err.message || 'Failed to calculate role alignment.')
     } finally {
-      setIsMatching(false)
+      if (!controller.signal.aborted) setIsMatching(false)
+      if (controllersRef.current.match === controller) delete controllersRef.current.match
     }
   }
 
@@ -185,6 +239,7 @@ export function MatchWizard({
     setResumeError(null)
     setJdError(null)
     setMatchingError(null)
+    savedResultRef.current = null
     setMaxStepReached(1)
     goToStep(1)
   }
@@ -202,6 +257,7 @@ export function MatchWizard({
         onStepClick={goToStep}
         isProcessing={isUploadingResume || isAnalyzingJd || isMatching}
       />
+      {profilePersistenceWarning && <div className="wizard-persistence-warning" role="status">{profilePersistenceWarning}</div>}
 
       <div className="wizard-step-stage">
         {currentStep === 1 && (
@@ -212,6 +268,9 @@ export function MatchWizard({
             isProcessing={isUploadingResume}
             error={resumeError}
             onClearError={() => setResumeError(null)}
+            savedProfile={initialProfile}
+            onUseProfile={handleUseSavedProfile}
+            onNavigate={onNavigate}
           />
         )}
 
@@ -222,11 +281,9 @@ export function MatchWizard({
             onProfileChange={handleProfileChange}
             onResetOriginal={handleResetOriginalProfile}
             onBack={() => goToStep(1)}
-            onNext={() => {
-              setMaxStepReached((prev) => Math.max(prev, 3))
-              goToStep(3)
-            }}
+            onNext={handleConfirmProfile}
             isEdited={isProfileEdited}
+            error={resumeError}
           />
         )}
 

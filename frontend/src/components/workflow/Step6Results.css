@@ -15,7 +15,8 @@
 }
 
 .results-header-banner p {
-  font-size: var(--text-sm);
+  font-size: 15px;
+  line-height: 1.55;
   color: var(--text-muted);
 }
 
@@ -26,8 +27,13 @@
 .results-grid {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-5);
   width: 100%;
+}
+
+/* Keep the result surfaces on the same spacing rhythm as Role analysis. */
+.results-grid > .ui-card {
+  border-radius: var(--radius);
 }
 
 /* Score Overview */
@@ -155,7 +161,7 @@
 }
 
 .ambiguity-list li {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #EDEDED;
 }
 
@@ -212,11 +218,11 @@
 .missing-skill-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
+  gap: var(--space-2);
+  padding: var(--space-4);
   background: var(--surface-inset);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 
 .matched-skill-top,
@@ -235,7 +241,7 @@
 
 .matched-skill-name,
 .missing-skill-name {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--text-h);
 }
 
@@ -256,14 +262,14 @@
 }
 
 .candidate-evidence-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--text-muted);
   font-style: italic;
   line-height: 1.5;
 }
 
 .missing-reason-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -278,20 +284,20 @@
 .rec-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
+  gap: var(--space-2);
+  padding: var(--space-4);
   background: var(--surface-inset);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 
 .rec-item-title {
-  font-size: var(--text-xs);
+  font-size: var(--text-base);
   color: var(--text-h);
 }
 
 .rec-item-action {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
 }

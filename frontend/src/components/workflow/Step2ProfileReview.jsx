@@ -19,6 +19,7 @@ export function Step2ProfileReview({
   onBack,
   onNext,
   isEdited = false,
+  error = null,
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [draftProfile, setDraftProfile] = useState(() => JSON.parse(JSON.stringify(profile)))
@@ -142,6 +143,7 @@ export function Step2ProfileReview({
           Inspect the structured signals extracted from your resume. You may adjust or supplement competencies to ensure the role comparison is completely accurate.
         </p>
       </div>
+      {error && <div className="step2-error" role="alert">{error}</div>}
 
       <div className="profile-review-actions-top">
         {!isEditing ? (
@@ -471,7 +473,7 @@ export function Step2ProfileReview({
         <Button
           variant="primary"
           size="lg"
-          onClick={onNext}
+            onClick={() => onNext(isEditing ? draftProfile : profile)}
           iconRight={<ArrowRight size={16} />}
         >
           Continue to Job Description

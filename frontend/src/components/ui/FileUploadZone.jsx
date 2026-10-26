@@ -29,7 +29,7 @@ export function FileUploadZone({
   const fileName = currentFileName !== undefined && currentFileName !== null ? currentFileName : internalFileName
 
   useEffect(() => {
-    if (!animate || !containerRef.current) return
+    if (!animate || !containerRef.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     // Gentle floating icon effect
     if (iconRef.current) {
@@ -55,7 +55,7 @@ export function FileUploadZone({
     setInternalFileName(file.name)
 
     // Subtle press bounce animation
-    if (containerRef.current) {
+    if (containerRef.current && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       gsap.to(containerRef.current, {
         scale: 0.985,
         duration: 0.15,
@@ -73,6 +73,7 @@ export function FileUploadZone({
   const handleDrop = (e) => {
     e.preventDefault()
     setDragging(false)
+    if (isLoading) return
     const file = e.dataTransfer?.files?.[0]
     validateAndHandle(file)
   }

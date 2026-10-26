@@ -41,6 +41,7 @@ async def build_profile_from_resume(
         if isinstance(e, HTTPException):
             raise
         else:
+            print(e)
             raise HTTPException(
                 status_code=500,
                 detail="Failed to build profile.",

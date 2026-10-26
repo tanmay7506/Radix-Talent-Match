@@ -29,7 +29,7 @@ const STUB_RESPONSES = [
   "RADIX Talent Match extracts your core skill categories from your resume and matches them against job description requirements.",
   "To get the best match score, ensure your profile has your top technical skills, hackathons, and certifications listed.",
   "Check the 'Company & Match' tab to see detailed skill overlaps and gap analysis for your target role.",
-  "You can paste any job description in the 'Resume & JD' tab to see the required RADIX categories and tech stack.",
+  "You can update a job description on the Company & Match page to see its RADIX categories and required technologies.",
 ]
 
 let stubIdx = 0

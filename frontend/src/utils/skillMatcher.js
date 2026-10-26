@@ -12,7 +12,8 @@ export function computeLocalSkillMatch(profile, jdData) {
       .map(([cat]) => cat.toLowerCase())
   )
 
-  const profileSkillNames = (profile.skills || []).map((s) => s.skill_name)
+  const normalizedSkills = (profile.skills || []).map((skill) => typeof skill === 'string' ? { skill_name: skill } : skill).filter((skill) => skill?.skill_name)
+  const profileSkillNames = normalizedSkills.map((s) => s.skill_name)
 
   const matched = profileSkillNames.filter((n) => jdCategories.has(n.toLowerCase()))
   const missing = [...jdCategories]
@@ -27,7 +28,7 @@ export function computeLocalSkillMatch(profile, jdData) {
   const total = matched.length + missing.length
   const scorePct = total > 0 ? Math.round((matched.length / total) * 100) : 0
 
-  const profileSkillBars = (profile.skills || [])
+  const profileSkillBars = normalizedSkills
     .filter((s) => matched.includes(s.skill_name))
     .sort((a, b) => (b.skill_level || 0) - (a.skill_level || 0))
     .map((s) => ({
@@ -57,10 +58,13 @@ export function computeLocalSkillMatch(profile, jdData) {
 export function formatBackendMatchResponse(backendResponse, profile) {
   if (!backendResponse) return null
 
-  const matchedSkillNames = (backendResponse.matched_skills || []).map((s) => s.skill_name)
-  const missingSkillNames = (backendResponse.missing_skills || []).map((s) => s.skill_name)
+  const matchedDetails = backendResponse.matched_skills || []
+  const missingDetails = backendResponse.missing_skills || []
+  const matchedSkillNames = matchedDetails.map((skill) => skill.skill_name)
+  const missingSkillNames = missingDetails.map((skill) => skill.skill_name)
 
-  const profileSkillBars = (profile?.skills || [])
+  const normalizedSkills = (profile?.skills || []).map((skill) => typeof skill === 'string' ? { skill_name: skill } : skill).filter((skill) => skill?.skill_name)
+  const profileSkillBars = normalizedSkills
     .filter((s) => matchedSkillNames.some((m) => m.toLowerCase() === s.skill_name.toLowerCase()))
     .sort((a, b) => (b.skill_level || 0) - (a.skill_level || 0))
     .map((s) => ({
@@ -73,7 +77,9 @@ export function formatBackendMatchResponse(backendResponse, profile) {
   return {
     scorePct: Math.round(backendResponse.match_score || 0),
     matched: matchedSkillNames,
+    matchedDetails,
     missing: missingSkillNames,
+    missingDetails,
     profileSkillBars,
     confidence: backendResponse.match_confidence || 'medium',
     recommendations: backendResponse.recommendations || [],

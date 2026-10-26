@@ -1,7 +1,7 @@
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from functions.models import model
+from functions.models import model, model_genai
 from langchain_core.prompts import ChatPromptTemplate
 
 SkillCode = Literal[
@@ -87,7 +87,7 @@ def map_skill_metadata(profile: ProfileResponseModel) -> ProfileResponseModel:
 async def extract_data[T: BaseModel](
     data_dump: str, prompt: str, pydantic_model: type[T]
 ) -> T:
-    structured_model = model.with_structured_output(pydantic_model)
+    structured_model = model_genai.with_structured_output(pydantic_model)
     parsed_prompt = ChatPromptTemplate.from_template(prompt)
     pipeline = parsed_prompt | structured_model
     data = pipeline.invoke({"data": data_dump})

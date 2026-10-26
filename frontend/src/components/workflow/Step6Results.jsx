@@ -26,6 +26,11 @@ export function Step6Results({
   const confidence = matchResult.match_confidence || 'medium'
   const matched = matchResult.matched_skills || []
   const missing = matchResult.missing_skills || []
+  const sortedMissing = missing.map((item, index) => ({ item, index })).sort((a, b) => {
+    const rank = { high: 0, medium: 1, low: 2 }
+    const priority = (item) => String(item.priority || 'medium').toLowerCase().replace(/\s+priority$/, '')
+    return (rank[priority(a.item)] ?? 1) - (rank[priority(b.item)] ?? 1) || a.index - b.index
+  }).map(({ item }) => item)
   const gaps = matchResult.skill_gaps || []
   const recommendations = matchResult.recommendations || []
   const ambiguityAlerts = matchResult.ambiguity_alerts || []
@@ -183,12 +188,12 @@ export function Step6Results({
             <CardContent>
               {missing.length > 0 ? (
                 <div className="missing-skills-list">
-                  {missing.map((item, idx) => (
+                {sortedMissing.map((item, idx) => (
                     <div key={`${item.skill_name}-${idx}`} className="missing-skill-item">
                       <div className="missing-skill-top">
                         <strong className="missing-skill-name">{item.skill_name}</strong>
                         <Badge
-                          variant={item.priority === 'high' ? 'error' : 'warning'}
+                          variant={String(item.priority || 'medium').toLowerCase().startsWith('high') ? 'error' : String(item.priority || '').toLowerCase().startsWith('low') ? 'success' : 'warning'}
                           size="sm"
                         >
                           {item.priority?.toUpperCase()} PRIORITY

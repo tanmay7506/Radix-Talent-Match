@@ -1,21 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { gsap } from 'gsap'
-import { Home, Sparkles, User, FileText, BarChart3, Menu, X } from 'lucide-react'
+import { Home, Sparkles, User, BarChart3, Menu, X, Clock3, LogIn, LogOut } from 'lucide-react'
 import './Header.css'
 
 const PAGES = [
   { id: 'home',     label: 'Home',          Icon: Home },
   { id: 'wizard',   label: 'Match Wizard',  Icon: Sparkles },
   { id: 'profile',  label: 'Profile',        Icon: User },
-  { id: 'resume',   label: 'Resume & JD',    Icon: FileText },
   { id: 'analysis', label: 'Company & Match', Icon: BarChart3 },
+  { id: 'history', label: 'Match History', Icon: Clock3 },
 ]
 
-export default function Header({ currentPage, onNavigate }) {
+export default function Header({ currentPage, user, onLogout }) {
   const logoRef   = useRef(null)
   const navRef    = useRef(null)
   const titleRef  = useRef(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerPage, setDrawerPage] = useState(currentPage)
+  useEffect(() => {
+    const closeOnEscape = (event) => { if (event.key === 'Escape') setDrawerOpen(false) }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [])
+  const mobileMenuOpen = drawerOpen && drawerPage === currentPage
 
   // ── Preserved GSAP entrance animation ──────────────────────────────────
   useEffect(() => {
@@ -37,17 +45,13 @@ export default function Header({ currentPage, onNavigate }) {
     return () => { tl.kill() }
   }, [])
 
-  const handleNav = (id) => {
-    setDrawerOpen(false)
-    onNavigate(id)
-  }
+  const paths = { home: '/', wizard: '/match', profile: '/profile', analysis: '/analysis', history: '/history' }
 
   return (
     <>
       <header className="header">
         {/* Brand */}
-        <div className="header-brand" onClick={() => handleNav('home')} role="button" tabIndex={0}
-             onKeyDown={(e) => e.key === 'Enter' && handleNav('home')} aria-label="Go to home">
+        <Link className="header-brand" to="/" aria-label="Go to home" onClick={() => setDrawerOpen(false)}>
           <div className="header-logo" ref={logoRef}>
             <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
               <rect width="36" height="36" rx="10" fill="url(#radixGrad)" stroke="rgba(94,94,94,0.4)" strokeWidth="1" />
@@ -64,51 +68,56 @@ export default function Header({ currentPage, onNavigate }) {
           <span className="header-title" ref={titleRef}>
             RADIX <span>Talent Match</span>
           </span>
-        </div>
+        </Link>
 
         {/* Desktop nav */}
         <nav className="header-nav" ref={navRef} aria-label="Main navigation">
-          {PAGES.map(({ id, label, Icon }) => (
-            <button
+          {user && PAGES.map(({ id, label, Icon }) => (
+            <Link
               key={id}
+              to={paths[id]}
               className={`nav-link${currentPage === id ? ' active' : ''}`}
-              onClick={() => handleNav(id)}
+              onClick={() => setDrawerOpen(false)}
               aria-current={currentPage === id ? 'page' : undefined}
             >
               <span className="nav-icon" aria-hidden="true">
                 <Icon size={16} strokeWidth={2} />
               </span>
               {label}
-            </button>
+            </Link>
           ))}
+          {user ? <button className="nav-link" onClick={onLogout}><LogOut size={16} aria-hidden="true" /> Log out</button> : <Link className={`nav-link${currentPage === 'login' ? ' active' : ''}`} to="/login" aria-current={currentPage === 'login' ? 'page' : undefined}><LogIn size={16} aria-hidden="true" /> Log in</Link>}
         </nav>
 
         {/* Hamburger for mobile */}
         <button
           className="nav-hamburger"
-          aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={drawerOpen}
-          onClick={() => setDrawerOpen((v) => !v)}
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="mobile-navigation"
+          onClick={() => { setDrawerPage(currentPage); setDrawerOpen((v) => !v) }}
         >
-          {drawerOpen ? <X size={22} strokeWidth={2} /> : <Menu size={22} strokeWidth={2} />}
+          {mobileMenuOpen ? <X size={22} strokeWidth={2} /> : <Menu size={22} strokeWidth={2} />}
         </button>
       </header>
 
       {/* Mobile drawer */}
-      <div className={`mobile-drawer${drawerOpen ? ' open' : ''}`} role="navigation" aria-label="Mobile navigation">
-        {PAGES.map(({ id, label, Icon }) => (
-          <button
+      <nav id="mobile-navigation" className={`mobile-drawer${mobileMenuOpen ? ' open' : ''}`} aria-label="Mobile navigation" aria-hidden={!mobileMenuOpen}>
+        {user && PAGES.map(({ id, label, Icon }) => (
+          <Link
             key={id}
+            to={paths[id]}
             className={`nav-link${currentPage === id ? ' active' : ''}`}
-            onClick={() => handleNav(id)}
+            onClick={() => setDrawerOpen(false)}
           >
             <span className="nav-icon" aria-hidden="true">
               <Icon size={18} strokeWidth={2} />
             </span>
             {label}
-          </button>
+          </Link>
         ))}
-      </div>
+        {user ? <button className="nav-link" onClick={onLogout}><LogOut size={18} aria-hidden="true" /> Log out</button> : <Link className={`nav-link${currentPage === 'login' ? ' active' : ''}`} to="/login" onClick={() => setDrawerOpen(false)} aria-current={currentPage === 'login' ? 'page' : undefined}><LogIn size={18} aria-hidden="true" /> Log in</Link>}
+      </nav>
     </>
   )
 }
