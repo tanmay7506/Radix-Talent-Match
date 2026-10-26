@@ -22,27 +22,16 @@ async def build_profile_from_resume(
 ) -> ProfileResponseModel:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required.")
-    try:
-        content = await file.read()
-        if not content:
-            raise HTTPException(status_code=400, detail="Empty files are not allowed")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty files are not allowed")
 
-        parsed_text = parse_document(content, file.filename)
-        if not parsed_text.strip():
-            raise HTTPException(status_code=400, detail="Text could not be parsed")
+    parsed_text = parse_document(content, file.filename)
+    if not parsed_text.strip():
+        raise HTTPException(status_code=400, detail="Text could not be parsed")
 
-        profile = await extract_data(
-            data_dump=parsed_text,
-            prompt=profile_extraction_prompt,
-            pydantic_model=ProfileResponseModel,
-        )
-        return profile
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise
-        else:
-            print(e)
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to build profile.",
-            )
+    return await extract_data(
+        data_dump=parsed_text,
+        prompt=profile_extraction_prompt,
+        pydantic_model=ProfileResponseModel,
+    )

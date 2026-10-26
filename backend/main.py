@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from routers.profile_builder import profile_builder_router
 from routers.skills_matching import skill_matching_router
 from fastapi.middleware.cors import CORSMiddleware
-
+from routers.talent_check import talent_check_router
 
 app = FastAPI()
 
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(profile_builder_router)
 app.include_router(jd_analytics_router)
 app.include_router(skill_matching_router)
+app.include_router(talent_check_router)
 
 
 @app.get("/")

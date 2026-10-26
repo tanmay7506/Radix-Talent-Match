@@ -30,9 +30,8 @@ async def extract_skills(file: UploadFile = File(...)):
     if not jd_text.strip():
         raise HTTPException(status_code=400, detail="Text could not be parsed")
 
-    profile = await extract_data(
+    return await extract_data(
         data_dump=jd_text,
         prompt=jd_extraction_prompt,
         pydantic_model=SkillExtractionOutput,
     )
-    return profile
