@@ -74,10 +74,6 @@ export default function App() {
             </div>
           )}
         </main>
-
-        <footer className="footer">
-          <p>Built with <span className="accent-dot">♥</span> using FastAPI + Gemini AI</p>
-        </footer>
       </div>
     </>
   )

@@ -54,7 +54,9 @@ export default function SkillsGrid({ skills }) {
         <p className="section-sub">AI-evaluated competencies extracted from your resume</p>
       </div>
       <div className="skills-grid" ref={gridRef}>
-        {skills.map((skill, i) => (\n          <SkillCard key={i} skill={skill} />\n        ))}
+        {skills.map((skill, i) => (
+          <SkillCard key={i} skill={skill} />
+        ))}
       </div>
     </section>
   )
