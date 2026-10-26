@@ -1,0 +1,157 @@
+/* ─── Wizard Stepper Styles ─────────────────────────────────────────────── */
+
+.wizard-stepper {
+  width: 100%;
+  margin-bottom: var(--space-8);
+  padding: var(--space-4) var(--space-6);
+  background: linear-gradient(110deg, rgba(151, 165, 177, 0.07), transparent 42%), var(--surface);
+  border: 1px solid rgba(151, 165, 177, 0.24);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.wizard-stepper-list {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.wizard-step-item {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+.wizard-step-item:last-child {
+  flex: 0 0 auto;
+}
+
+.wizard-step-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  outline: none;
+  text-align: left;
+  user-select: none;
+}
+
+.wizard-step-btn:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.wizard-step-indicator {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+/* Pending step */
+.wizard-step-pending .wizard-step-indicator {
+  background: rgba(151, 165, 177, 0.08);
+  border: 1px solid rgba(151, 165, 177, 0.22);
+  color: var(--text-dim);
+}
+
+.wizard-step-pending .wizard-step-title {
+  color: var(--text-muted);
+}
+
+.wizard-step-pending .wizard-step-btn:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+/* Current step */
+.wizard-step-current .wizard-step-indicator {
+  background: #697985;
+  border: 1.5px solid #aebbc3;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 4px rgba(151, 165, 177, 0.11), 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.wizard-step-current .wizard-step-title {
+  color: #FFFFFF;
+  font-weight: var(--weight-bold);
+}
+
+/* Completed step */
+.wizard-step-completed .wizard-step-indicator {
+  background: rgba(151, 165, 177, 0.19);
+  border: 1px solid rgba(151, 165, 177, 0.43);
+  color: #dce3e7;
+}
+
+.wizard-step-completed .wizard-step-btn:hover {
+  background: rgba(151, 165, 177, 0.1);
+}
+
+.wizard-step-completed .wizard-step-title {
+  color: var(--text);
+}
+
+/* Label grouping */
+.wizard-step-label-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.wizard-step-num {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.wizard-step-title {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+/* Connecting bar between steps */
+.wizard-step-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--border-subtle);
+  margin: 0 var(--space-4);
+  transition: background var(--transition-normal);
+}
+
+.wizard-step-connector.connector-completed {
+  background: #697985;
+}
+
+/* ─── Responsive Stepper ────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .wizard-step-label-group {
+    display: none;
+  }
+  
+  .wizard-step-connector {
+    margin: 0 var(--space-2);
+  }
+  
+  .wizard-stepper {
+    padding: var(--space-3) var(--space-4);
+  }
+}

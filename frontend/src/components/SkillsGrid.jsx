@@ -38,7 +38,7 @@ export default function SkillsGrid({ skills }) {
 
   // ── Preserved GSAP animation on skills entrance and progress bars ────────
   useEffect(() => {
-    if (!skills?.length) return
+    if (!skills?.length || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     gsap.fromTo(
       gridRef.current.querySelectorAll('.skill-card'),
       { opacity: 0, y: 30, scale: 0.9 },
@@ -81,32 +81,9 @@ export default function SkillsGrid({ skills }) {
 function SkillCard({ skill }) {
   const meta = SKILL_META[skill.skill_code] || SKILL_META.OTH
   const levelPct = (skill.skill_level / 10) * 100
-  const cardRef = useRef(null)
-
-  const handleMouseEnter = () => {
-    gsap.to(cardRef.current, {
-      y: -4,
-      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.55)',
-      duration: 0.3,
-      ease: 'power2.out',
-    })
-  }
-
-  const handleMouseLeave = () => {
-    gsap.to(cardRef.current, {
-      y: 0,
-      boxShadow: 'var(--neo-shadow)',
-      duration: 0.3,
-      ease: 'power2.out',
-    })
-  }
-
   return (
     <div
       className="skill-card neo-card"
-      ref={cardRef}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
     >
       <div className="skill-top">
         <div className="skill-icon">

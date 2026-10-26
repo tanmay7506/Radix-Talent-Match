@@ -1,0 +1,18 @@
+/* ─── Match Wizard Layout Styles ────────────────────────────────────────── */
+
+.match-wizard-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.wizard-step-stage {
+  width: 100%;
+  min-height: 480px;
+  min-width: 0;
+}
+.wizard-step-stage > .wizard-step-container{gap:var(--space-6)}
+.wizard-step-stage .ui-card + .ui-card{margin-top:var(--space-4)}
+@media(max-width:600px){.match-wizard-container{gap:var(--space-5)}.wizard-step-stage{min-height:0}}
+.wizard-persistence-warning{margin:var(--space-4) 0;padding:var(--space-3) var(--space-4);border:1px solid var(--warning-border);border-radius:var(--radius-sm);background:var(--warning-bg);color:var(--warning);font-size:var(--text-sm)}

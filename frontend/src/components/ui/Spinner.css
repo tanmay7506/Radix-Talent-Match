@@ -1,0 +1,33 @@
+/* ─── UI Spinner Component ─────────────────────────────────────────────── */
+
+.ui-spinner {
+  animation: ui-spin 0.9s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes ui-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.ui-loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-6);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  width: 100%;
+}
+
+.ui-loading-message {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
+}

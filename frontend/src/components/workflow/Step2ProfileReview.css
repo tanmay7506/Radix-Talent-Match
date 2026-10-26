@@ -1,0 +1,334 @@
+/* ─── Step 2 Profile Review Styles ──────────────────────────────────────── */
+
+.header-badge-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.profile-review-actions-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.button-group-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.profile-review-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+/* Edit form stack */
+.edit-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-field label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  padding: 8px 12px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-h);
+  font-size: var(--text-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  border-color: var(--color-secondary);
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+/* Readonly Credentials View */
+.credentials-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.credential-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.credential-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.credential-value {
+  font-size: var(--text-sm);
+  color: var(--text-h);
+}
+
+.credential-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.education-box {
+  padding: 10px 14px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+/* Tags and sections */
+.section-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.section-block:last-child {
+  margin-bottom: 0;
+}
+
+.block-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.tag-list-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 0 0 4px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.badge-remove-btn:hover {
+  color: var(--error);
+}
+
+.add-tag-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: 6px;
+}
+
+.add-tag-row input {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-h);
+  font-size: var(--text-xs);
+}
+
+.bullet-list-clean {
+  padding-left: 18px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bullet-list-clean li {
+  font-size: var(--text-xs);
+  color: var(--text);
+  line-height: 1.4;
+}
+
+/* Skills card & table */
+.skills-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.add-skill-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.skill-select {
+  padding: 6px 10px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-h);
+  font-size: var(--text-xs);
+}
+
+.level-input {
+  width: 50px;
+  padding: 6px 8px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-h);
+  font-size: var(--text-xs);
+}
+
+.skills-review-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skill-review-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+}
+
+.skill-review-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1;
+}
+
+.skill-code-badge {
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  padding: 3px 6px;
+  border-radius: var(--radius-xs);
+  background: rgba(94, 94, 94, 0.25);
+  border: 1px solid var(--border);
+  color: #FFFFFF;
+}
+
+.skill-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.skill-name-text {
+  font-size: var(--text-sm);
+  color: var(--text-h);
+}
+
+.skill-evidence-preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.level-display-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(94, 94, 94, 0.16);
+  border: 1px solid var(--border);
+}
+
+.level-num {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-extrabold);
+  color: #FFFFFF;
+}
+
+.level-denom {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.level-edit-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.level-slider {
+  width: 100px;
+  accent-color: var(--color-secondary);
+}
+
+.level-val-text {
+  font-size: var(--text-xs);
+  color: var(--text-h);
+  font-weight: var(--weight-semibold);
+  width: 32px;
+}
+
+.skill-delete-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.skill-delete-btn:hover {
+  background: var(--error-bg);
+  border-color: var(--error);
+  color: #FFFFFF;
+}
+
+@media (max-width: 900px) {
+  .profile-review-grid {
+    grid-template-columns: 1fr;
+  }
+}

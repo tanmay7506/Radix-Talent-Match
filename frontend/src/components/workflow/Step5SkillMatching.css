@@ -1,0 +1,89 @@
+/* ─── Step 5 Skill Matching Styles ──────────────────────────────────────── */
+
+.step5-body {
+  width: 100%;
+}
+
+.matching-in-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.matching-stages-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.matching-retry-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.match-ready-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.match-ready-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.match-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.stat-pill-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.stat-pill-val {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+  color: var(--text-h);
+}
+
+.stat-val-matched {
+  color: var(--success);
+}
+
+.stat-val-missing {
+  color: var(--error);
+}
+
+@media (max-width: 768px) {
+  .match-summary-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

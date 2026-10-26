@@ -1,0 +1,70 @@
+/* ─── UI Callout Component ─────────────────────────────────────────────── */
+
+.ui-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  width: 100%;
+}
+
+.ui-callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ui-callout-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.ui-callout-title {
+  color: var(--text-h);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+}
+
+.ui-callout-body {
+  color: #EDEDED;
+}
+
+/* ─── Types ─────────────────────────────────────────────────────────────── */
+.ui-callout-info {
+  background: rgba(94, 94, 94, 0.14);
+  border: 1px solid var(--border);
+}
+.ui-callout-info .ui-callout-icon {
+  color: var(--color-secondary);
+}
+
+.ui-callout-success {
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+}
+.ui-callout-success .ui-callout-icon {
+  color: var(--success);
+}
+
+.ui-callout-warning {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+.ui-callout-warning .ui-callout-icon {
+  color: var(--warning);
+}
+
+.ui-callout-error {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+}
+.ui-callout-error .ui-callout-icon {
+  color: var(--error);
+}

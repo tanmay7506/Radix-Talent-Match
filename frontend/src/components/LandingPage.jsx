@@ -1,6 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
-import { UserCheck, FileText, FileSearch, Building2, Target, Check } from 'lucide-react'
+import {
+  UserCheck,
+  FileText,
+  FileSearch,
+  Building2,
+  Target,
+  Check,
+  ArrowRight,
+  Clock3,
+} from 'lucide-react'
+import { Button } from './ui/Button'
+import { Badge } from './ui/Badge'
 import './LandingPage.css'
 
 const FEATURES = [
@@ -28,6 +39,11 @@ const FEATURES = [
     Icon: Target,
     title: 'Skill Gap Identification',
     desc: 'See exactly which skills you match, which are missing, and get actionable recommendations to close the gap.',
+  },
+  {
+    Icon: Clock3,
+    title: 'Match History',
+    desc: 'Return to previous role assessments and review saved scores, skill gaps, and recommendations.',
   },
 ]
 
@@ -110,17 +126,21 @@ export default function LandingPage({ onNavigate }) {
   }, [])
 
   return (
-    <div ref={heroRef}>
+    <div ref={heroRef} className="landing-page">
       {/* ── Hero ─────────────────────────────────────────────────── */}
       <section className="hero-section" aria-labelledby="hero-heading">
         <div className="hero-left">
-          <div className="hero-badge" ref={badgeRef}>
-            <span className="hero-badge-dot" aria-hidden="true" />
-            Powered by AI · 12 RADIX skill categories
+          <div className="hero-badge-wrap" ref={badgeRef}>
+            <Badge
+              variant="default"
+              icon={<span className="hero-badge-dot" aria-hidden="true" />}
+            >
+              Powered by AI · 12 RADIX skill categories
+            </Badge>
           </div>
 
           <h1 id="hero-heading" className="hero-title" ref={titleRef}>
-            Connect Talent<br/>
+            Connect Talent<br />
             with <span className="gradient-text">Opportunity</span>
           </h1>
 
@@ -130,20 +150,23 @@ export default function LandingPage({ onNavigate }) {
           </p>
 
           <div className="hero-ctas" ref={ctaRef}>
-            <button
+            <Button
               id="hero-cta-profile"
-              className="hero-cta-btn hero-cta-primary"
-              onClick={() => onNavigate('profile')}
+              variant="primary"
+              size="lg"
+              onClick={() => onNavigate('wizard')}
+              iconRight={<ArrowRight size={16} />}
             >
-              Build Your Profile
-            </button>
-            <button
+              Start Match Wizard
+            </Button>
+            <Button
               id="hero-cta-analysis"
-              className="hero-cta-btn hero-cta-secondary"
+              variant="secondary"
+              size="lg"
               onClick={() => onNavigate('analysis')}
             >
               Explore Skill Matching
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -163,13 +186,22 @@ export default function LandingPage({ onNavigate }) {
               <div className="hero-card-name">Senior Backend Role</div>
               <div className="hero-card-role">Your profile · 3 matches found</div>
               <div className="hero-mini-skills">
-                <span className="hero-mini-skill"><Check size={11} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 3 }} />Coding</span>
-                <span className="hero-mini-skill"><Check size={11} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 3 }} />SQL</span>
-                <span className="hero-mini-skill"><Check size={11} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 3 }} />Cloud</span>
+                <span className="hero-mini-skill">
+                  <Check size={11} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                  Coding
+                </span>
+                <span className="hero-mini-skill">
+                  <Check size={11} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                  SQL
+                </span>
+                <span className="hero-mini-skill">
+                  <Check size={11} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                  Cloud
+                </span>
               </div>
               <div className="hero-match-score">
                 <span className="hero-score-num">76%</span>
-                <span className="hero-score-label">Skill match<br/>2 gaps identified</span>
+                <span className="hero-score-label">Skill match<br />2 gaps identified</span>
               </div>
             </div>
           </div>
@@ -178,15 +210,15 @@ export default function LandingPage({ onNavigate }) {
 
       {/* ── Stats bar ─────────────────────────────────────────────── */}
       <div className="stats-bar" ref={statsRef} role="list" aria-label="Platform statistics">
-        <div className="stat-card neo-card" role="listitem">
+        <div className="stat-card" role="listitem">
           <div className="stat-num">12</div>
           <div className="stat-label">RADIX Skill Categories</div>
         </div>
-        <div className="stat-card neo-card" role="listitem">
-          <div className="stat-num">2</div>
-          <div className="stat-label">Active API Endpoints</div>
+        <div className="stat-card" role="listitem">
+          <div className="stat-num">4</div>
+          <div className="stat-label">Steps to a Skill Match</div>
         </div>
-        <div className="stat-card neo-card" role="listitem">
+        <div className="stat-card" role="listitem">
           <div className="stat-num">AI</div>
           <div className="stat-label">LLM-Powered Extraction</div>
         </div>
@@ -232,20 +264,22 @@ export default function LandingPage({ onNavigate }) {
         <h2>Ready to find your perfect match?</h2>
         <p>Build your profile in seconds and discover where you stand.</p>
         <div className="cta-strip-btns">
-          <button
+          <Button
             id="cta-strip-profile"
-            className="cta-strip-btn-primary"
+            variant="primary"
+            size="lg"
+            onClick={() => onNavigate('wizard')}
+          >
+            Start Match Wizard
+          </Button>
+          <Button
+            id="cta-strip-resume"
+            variant="ghost"
+            size="lg"
             onClick={() => onNavigate('profile')}
           >
-            Build Profile
-          </button>
-          <button
-            id="cta-strip-resume"
-            className="cta-strip-btn-ghost"
-            onClick={() => onNavigate('resume')}
-          >
-            Parse a Resume
-          </button>
+            Build Your Profile
+          </Button>
         </div>
       </div>
     </div>
