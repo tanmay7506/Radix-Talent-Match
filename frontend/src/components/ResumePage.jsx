@@ -1,23 +1,37 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   FileText,
   ClipboardList,
-  CheckCircle2,
-  FolderOpen,
-  Loader2,
+  FileSearch,
   Search,
   Layers,
-  FileSearch,
+  ArrowRight,
+  ArrowLeft,
 } from 'lucide-react'
+import { api } from '../services/api'
 import UploadZone from './UploadZone'
 import ProfileCard from './ProfileCard'
 import SkillsGrid from './SkillsGrid'
+import {
+  PageHeader,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Callout,
+  EmptyState,
+  LoadingOverlay,
+  Button,
+  Tag,
+  FileUploadZone,
+} from './ui'
 import './ResumePage.css'
 
 /**
- * Resume & Job Description page.
- * Section A: Resume Parsing – reuses the existing UploadZone → ProfileCard + SkillsGrid pipeline.
- * Section B: JD Analysis   – new JD upload, calls POST /jd/extract-skills.
+ * Resume Parsing & Job Description Analysis Page.
+ * Section A: Resume Parsing – extracts candidate competencies.
+ * Section B: JD Analysis – extracts required RADIX categories and technologies via API service.
  */
 export default function ResumePage({
   resumeProfile,
@@ -29,227 +43,173 @@ export default function ResumePage({
   onNavigate,
 }) {
   return (
-    <div>
-      <div className="resume-page-header">
-        <h1>Resume Parsing &amp; Job Description Analysis</h1>
-        <p>Upload a resume to extract skills, and upload a job description to see what the role demands.</p>
-      </div>
+    <div className="resume-page">
+      <PageHeader
+        title="Resume & Job Description Analysis"
+        description="Upload a candidate resume to evaluate individual competencies, and upload a job description to extract demanded skill categories and technical requirements."
+      />
 
       <div className="resume-layout">
-        {/* ── Section A: Resume ─────────────────────────────────── */}
-        <div className="section-panel">
-          <div className="section-panel-header">
-            <div className="section-panel-icon" aria-hidden="true">
-              <FileText size={18} strokeWidth={2} />
-            </div>
-            <div>
-              <h2>Resume Parsing</h2>
-              <p>Uploads a resume (PDF/DOCX) and extracts a structured candidate profile with skill levels and evidence.</p>
-            </div>
-          </div>
-
-          {/* Existing UploadZone — GSAP animations preserved */}
-          <UploadZone
-            onProfileReceived={onResumeProfile}
-            isLoading={isResumeLoading}
-            setIsLoading={setResumeLoading}
-          />
-
-          {isResumeLoading && (
-            <div className="status-bar processing" role="status" aria-live="polite">
-              <Loader2 size={15} className="spinner" aria-hidden="true" />
-              <span>Extracting profile from resume…</span>
-            </div>
-          )}
-
-          {resumeProfile && !isResumeLoading && (
-            <>
-              <div className="status-bar success" role="status" aria-live="polite">
-                <CheckCircle2 size={15} strokeWidth={2} aria-hidden="true" />
-                <span>Profile extracted successfully</span>
+        {/* ── Section A: Resume Parsing ─────────────────────────── */}
+        <div className="resume-col">
+          <Card className="section-panel">
+            <CardHeader>
+              <div className="section-panel-header">
+                <div className="section-panel-icon" aria-hidden="true">
+                  <FileText size={18} strokeWidth={2} />
+                </div>
+                <div>
+                  <CardTitle as="h2">Candidate Resume</CardTitle>
+                  <CardDescription>
+                    Upload a PDF or DOCX resume to extract structured candidate profile and evaluated skills.
+                  </CardDescription>
+                </div>
               </div>
-              <ProfileCard profile={resumeProfile} />
-              <SkillsGrid skills={resumeProfile.skills} />
-            </>
-          )}
+            </CardHeader>
 
-          {!resumeProfile && !isResumeLoading && (
-            <div className="empty-state">
-              <span className="empty-state-icon" aria-hidden="true">
-                <ClipboardList size={36} strokeWidth={1.8} />
-              </span>
-              <h3>No resume parsed yet</h3>
-              <p>Upload a PDF or DOCX resume above to see extracted profile data.</p>
-            </div>
-          )}
+            <CardContent>
+              <UploadZone
+                onProfileReceived={onResumeProfile}
+                isLoading={isResumeLoading}
+                setIsLoading={setResumeLoading}
+              />
+
+              {isResumeLoading && (
+                <LoadingOverlay message="Extracting competencies from resume…" />
+              )}
+
+              {resumeProfile && !isResumeLoading && (
+                <>
+                  <Callout type="success" title="Resume Parsed">
+                    Candidate profile successfully extracted and ready for role matching.
+                  </Callout>
+                  <ProfileCard profile={resumeProfile} />
+                  <SkillsGrid skills={resumeProfile.skills} />
+                </>
+              )}
+
+              {!resumeProfile && !isResumeLoading && (
+                <EmptyState
+                  icon={<ClipboardList size={28} strokeWidth={1.8} />}
+                  title="No resume parsed yet"
+                  description="Upload a PDF or DOCX resume above to see extracted competencies and evidence."
+                />
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── Section B: JD Analysis ────────────────────────────── */}
-        <JdAnalysisPanel jdData={jdData} onJdData={onJdData} onNavigate={onNavigate} />
+        <div className="resume-col">
+          <JdAnalysisPanel jdData={jdData} onJdData={onJdData} onNavigate={onNavigate} />
+        </div>
       </div>
 
-      {/* ── Navigation CTA ─────────────────────────────────────── */}
+      {/* ── Global Step CTA ─────────────────────────────────────── */}
       {(resumeProfile || jdData) && (
-        <div className="resume-navigate-cta">
-          <p>Ready to see how your profile compares to the job?</p>
-          <button
-            id="resume-to-analysis-btn"
-            className="neo-btn neo-btn-accent"
-            onClick={() => onNavigate('analysis')}
-          >
-            View Skill Match →
-          </button>
-          {!resumeProfile && (
-            <button
-              id="resume-to-profile-btn"
-              className="neo-btn neo-btn-ghost"
-              onClick={() => onNavigate('profile')}
-            >
-              ← Build Profile First
-            </button>
-          )}
-        </div>
+        <Card className="resume-bottom-cta" padding="md">
+          <div className="resume-cta-content">
+            <div className="resume-cta-text">
+              <h4>Ready to evaluate the role alignment?</h4>
+              <p>Compare your parsed candidate skills against the job description requirements.</p>
+            </div>
+            <div className="resume-cta-buttons">
+              <Button
+                id="resume-to-analysis-btn"
+                variant="primary"
+                onClick={() => onNavigate('analysis')}
+                iconRight={<ArrowRight size={15} />}
+              >
+                View Skill Match
+              </Button>
+              {!resumeProfile && (
+                <Button
+                  id="resume-to-profile-btn"
+                  variant="ghost"
+                  onClick={() => onNavigate('profile')}
+                  icon={<ArrowLeft size={15} />}
+                >
+                  Build Profile First
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
       )}
     </div>
   )
 }
 
 function JdAnalysisPanel({ jdData, onJdData, onNavigate }) {
-  const [loading, setLoading]   = useState(false)
-  const [dragging, setDragging] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const [fileName, setFileName] = useState(null)
-  const [error, setError]       = useState(null)
-  const inputRef                = useRef(null)
 
-  const handleFile = async (file) => {
+  const handleFileSelect = async (file) => {
     if (!file) return
-    const ext = file.name.split('.').pop().toLowerCase()
-    if (!['pdf', 'docx'].includes(ext)) {
-      setError('Only PDF or DOCX files are supported.')
-      return
-    }
     setError(null)
     setFileName(file.name)
     setLoading(true)
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
-      const res = await fetch('http://localhost:8000/jd/extract-skills', {
-        method: 'POST',
-        body: formData,
-      })
-      if (!res.ok) {
-        throw new Error(`Server returned ${res.status}: ${res.statusText}`)
-      }
-      const data = await res.json()
+      const data = await api.extractJdSkills(file)
       onJdData(data)
     } catch (err) {
-      setError(`Failed to extract JD skills: ${err.message}`)
+      setError(err.message || 'Failed to extract skills from job description.')
     } finally {
       setLoading(false)
     }
   }
 
-  const onDrop = (e) => {
-    e.preventDefault()
-    setDragging(false)
-    handleFile(e.dataTransfer.files[0])
-  }
-
-  const nonEmptyCategories = jdData
-    ? Object.entries(jdData.radix_categories).filter(([, skills]) => skills.length > 0)
+  const nonEmptyCategories = jdData?.radix_categories
+    ? Object.entries(jdData.radix_categories).filter(([, skills]) => Array.isArray(skills) && skills.length > 0)
     : []
 
   return (
-    <div className="section-panel">
-      <div className="section-panel-header">
-        <div className="section-panel-icon" aria-hidden="true">
-          <FileSearch size={18} strokeWidth={2} />
-        </div>
-        <div>
-          <h2>Job Description Analysis</h2>
-          <p>Upload a JD (PDF/DOCX) to extract required skill categories and specific technologies.</p>
-        </div>
-      </div>
-
-      {/* JD Upload zone */}
-      <div
-        id="jd-upload-zone"
-        className={`jd-upload-zone${dragging ? ' dragging' : ''}`}
-        role="button"
-        tabIndex={0}
-        aria-label="Upload job description file"
-        onClick={() => !loading && inputRef.current.click()}
-        onKeyDown={(e) => e.key === 'Enter' && !loading && inputRef.current.click()}
-        onDrop={onDrop}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf,.docx"
-          className="sr-only"
-          aria-hidden="true"
-          onChange={(e) => handleFile(e.target.files[0])}
-        />
-        <div className="jd-upload-icon" aria-hidden="true">
-          {loading ? (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="spinner">
-              <circle cx="12" cy="12" r="9" stroke="var(--border)" strokeWidth="3"/>
-              <path d="M12 3 A9 9 0 0 1 21 12" stroke="var(--color-secondary)" strokeWidth="3" strokeLinecap="round"/>
-            </svg>
-          ) : (
-            <FolderOpen size={24} strokeWidth={1.8} />
-          )}
-        </div>
-        <div className="jd-upload-text">
-          {loading ? (
-            <>
-              <h3>Analysing job description…</h3>
-              <p>Extracting RADIX skill categories and technologies</p>
-            </>
-          ) : fileName ? (
-            <>
-              <h3>{fileName}</h3>
-              <p>Click or drop another file to replace</p>
-            </>
-          ) : (
-            <>
-              <h3>Drop job description here</h3>
-              <p>PDF or DOCX · Click to browse</p>
-            </>
-          )}
-        </div>
-        {fileName && !loading && (
-          <span className="jd-file-name" aria-label={`Selected file: ${fileName}`}>{fileName}</span>
-        )}
-      </div>
-
-      {error && (
-        <p className="section-error" role="alert">{error}</p>
-      )}
-
-      {loading && (
-        <div className="status-bar processing" role="status" aria-live="polite">
-          <Loader2 size={15} className="spinner" aria-hidden="true" />
-          <span>Mapping skills to RADIX categories…</span>
-        </div>
-      )}
-
-      {jdData && !loading && (
-        <>
-          <div className="status-bar success" role="status" aria-live="polite">
-            <CheckCircle2 size={15} strokeWidth={2} aria-hidden="true" />
-            <span>JD analysis complete</span>
+    <Card className="section-panel">
+      <CardHeader>
+        <div className="section-panel-header">
+          <div className="section-panel-icon" aria-hidden="true">
+            <FileSearch size={18} strokeWidth={2} />
           </div>
+          <div>
+            <CardTitle as="h2">Job Description Analysis</CardTitle>
+            <CardDescription>
+              Upload a JD to extract required RADIX skill categories and specific technical requirements.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
 
+      <CardContent>
+        <FileUploadZone
+          id="jd-upload-zone"
+          onFileSelect={handleFileSelect}
+          isLoading={loading}
+          currentFileName={fileName}
+          acceptedExtensions={['pdf', 'docx']}
+          title="Drop job description here"
+          subtitle="PDF or DOCX format · Click to browse"
+          loadingTitle="Analysing job description…"
+          loadingSubtitle="Mapping skills to RADIX categories & tech stack"
+          compact={true}
+        />
+
+        {error && <Callout type="error">{error}</Callout>}
+
+        {loading && (
+          <LoadingOverlay message="Mapping job requirements to RADIX categories…" />
+        )}
+
+        {jdData && !loading && (
           <div className="jd-results">
+            <Callout type="success" title="Job Description Analysed">
+              Identified {nonEmptyCategories.length} skill categories and {jdData.technologies?.length || 0} specific technologies.
+            </Callout>
+
             {/* RADIX Skill Categories */}
             {nonEmptyCategories.length > 0 && (
-              <div>
+              <div className="jd-results-block">
                 <div className="jd-results-title">RADIX Skill Categories Required</div>
                 <div className="categories-grid">
                   {nonEmptyCategories.map(([cat, skills]) => (
@@ -257,7 +217,7 @@ function JdAnalysisPanel({ jdData, onJdData, onNavigate }) {
                       <div className="category-name">{cat}</div>
                       <div className="category-skills">
                         {skills.map((s) => (
-                          <span key={s} className="category-skill-tag">{s}</span>
+                          <Tag key={s} className="category-skill-tag">{s}</Tag>
                         ))}
                       </div>
                     </div>
@@ -268,49 +228,46 @@ function JdAnalysisPanel({ jdData, onJdData, onNavigate }) {
 
             {/* Technologies */}
             {jdData.technologies?.length > 0 && (
-              <div>
+              <div className="jd-results-block">
                 <div className="jd-results-title">Specific Technologies &amp; Tools</div>
                 <div className="tech-list">
                   {jdData.technologies.map((t) => (
-                    <span key={t} className="tech-tag">{t}</span>
+                    <Tag key={t} className="tech-tag">{t}</Tag>
                   ))}
                 </div>
               </div>
             )}
 
             {nonEmptyCategories.length === 0 && !jdData.technologies?.length && (
-              <div className="empty-state">
-                <span className="empty-state-icon" aria-hidden="true">
-                  <Search size={36} strokeWidth={1.8} />
-                </span>
-                <h3>No specific skills found</h3>
-                <p>The job description did not yield clear skill signals. Try a more detailed JD.</p>
-              </div>
+              <EmptyState
+                icon={<Search size={28} strokeWidth={1.8} />}
+                title="No specific skills detected"
+                description="The job description did not yield distinct technical signals. Try uploading a more comprehensive JD."
+              />
             )}
-          </div>
 
-          <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-            <button
-              id="jd-to-analysis-btn"
-              className="neo-btn neo-btn-accent"
-              onClick={() => onNavigate('analysis')}
-              style={{ width: '100%' }}
-            >
-              Compare with My Profile →
-            </button>
+            <div className="jd-action-row">
+              <Button
+                id="jd-to-analysis-btn"
+                variant="primary"
+                fullWidth
+                onClick={() => onNavigate('analysis')}
+                iconRight={<ArrowRight size={15} />}
+              >
+                Compare with Candidate Profile
+              </Button>
+            </div>
           </div>
-        </>
-      )}
+        )}
 
-      {!jdData && !loading && (
-        <div className="empty-state">
-          <span className="empty-state-icon" aria-hidden="true">
-            <Layers size={36} strokeWidth={1.8} />
-          </span>
-          <h3>No JD analysed yet</h3>
-          <p>Upload a job description above to see what skills and technologies this role requires.</p>
-        </div>
-      )}
-    </div>
+        {!jdData && !loading && (
+          <EmptyState
+            icon={<Layers size={28} strokeWidth={1.8} />}
+            title="No JD analysed yet"
+            description="Upload a job description above to inspect required competencies and technical tools."
+          />
+        )}
+      </CardContent>
+    </Card>
   )
 }

@@ -1,0 +1,12 @@
+/* ─── Match Wizard Layout Styles ────────────────────────────────────────── */
+
+.match-wizard-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.wizard-step-stage {
+  width: 100%;
+  min-height: 480px;
+}

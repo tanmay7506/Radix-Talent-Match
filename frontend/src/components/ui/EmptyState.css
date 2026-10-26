@@ -1,0 +1,50 @@
+/* ─── UI Empty State Component ─────────────────────────────────────────── */
+
+.ui-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-10) var(--space-6);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.ui-empty-state-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  background: rgba(94, 94, 94, 0.14);
+  border: 1px solid var(--border);
+  color: #EDEDED;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-2);
+}
+
+.ui-empty-state-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--text-h);
+}
+
+.ui-empty-state-desc {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+.ui-empty-state-action {
+  margin-top: var(--space-3);
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}

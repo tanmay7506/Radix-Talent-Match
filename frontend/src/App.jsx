@@ -5,6 +5,7 @@ import LandingPage from './components/LandingPage'
 import ProfilePage from './components/ProfilePage'
 import ResumePage from './components/ResumePage'
 import AnalysisPage from './components/AnalysisPage'
+import { MatchWizard } from './components/workflow/MatchWizard'
 import Chatbot from './components/Chatbot'
 import './App.css'
 import './index.css'
@@ -13,7 +14,7 @@ import './index.css'
  * Root application component for RADIX Talent Match.
  *
  * Routing: lightweight hash-based navigation.
- *   #home | #profile | #resume | #analysis
+ *   #home | #wizard | #profile | #resume | #analysis
  *
  * Theme:
  *   Primary:   #131314 (Obsidian Dark)
@@ -23,7 +24,7 @@ import './index.css'
  *   Professional, simple, elegant GSAP-animated dual-orb ambient mesh.
  */
 
-const VALID_PAGES = ['home', 'profile', 'resume', 'analysis']
+const VALID_PAGES = ['home', 'wizard', 'profile', 'resume', 'analysis']
 
 function getPageFromHash() {
   const hash = window.location.hash.replace('#', '')
@@ -125,6 +126,16 @@ export default function App() {
           <div className="page-inner page-transition" ref={pageRef}>
             {currentPage === 'home' && (
               <LandingPage onNavigate={navigate} />
+            )}
+
+            {currentPage === 'wizard' && (
+              <MatchWizard
+                initialProfile={profile || resumeProfile}
+                initialJdData={jdData}
+                onProfileSynced={setProfile}
+                onJdSynced={setJdData}
+                onNavigate={navigate}
+              />
             )}
 
             {currentPage === 'profile' && (

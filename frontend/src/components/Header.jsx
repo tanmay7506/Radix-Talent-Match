@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
-import { Home, User, FileText, BarChart3, Menu, X } from 'lucide-react'
+import { Home, Sparkles, User, FileText, BarChart3, Menu, X } from 'lucide-react'
 import './Header.css'
 
 const PAGES = [
   { id: 'home',     label: 'Home',          Icon: Home },
+  { id: 'wizard',   label: 'Match Wizard',  Icon: Sparkles },
   { id: 'profile',  label: 'Profile',        Icon: User },
   { id: 'resume',   label: 'Resume & JD',    Icon: FileText },
   { id: 'analysis', label: 'Company & Match', Icon: BarChart3 },
