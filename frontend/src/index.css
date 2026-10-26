@@ -1,25 +1,18 @@
-/* ─── Alohomora Dark Design System (Stitch Inspired) ─────────────────────────── */
+/* ─── Alohomora Refined Netflix-Inspired Dark Theme ─────────────────────────── */
 :root {
-  --bg-base: #0A0A0A;
-  --bg-surface: #131313;
-  --bg-card: #141414;
-  --bg-raised: #1A1A1A;
-  --bg-container: #201f1f;
-  --bg-container-high: #2a2a2a;
-  --bg-container-highest: #353534;
-  --bg-bright: #3a3939;
-  --border-subtle: #262626;
+  --bg-base: #0B0B0B;
+  --surface-main: #141414;
+  --surface-secondary: #1C1C1C;
+  --border-main: #303030;
   
-  --primary: #e50914;
-  --primary-hover: #b81d24;
-  --primary-glow: rgba(229, 9, 20, 0.25);
+  --primary: #E50914;
+  --primary-hover: #B20710;
   
-  --text-primary: #FFFFFF;
-  --text-secondary: #A3A3A3;
-  --text-tertiary: #737373;
+  --text-primary: #F5F5F5;
+  --text-secondary: #A0A0A0;
+  --text-muted: #707070;
   
   --emerald: #10b981;
-  --emerald-glow: rgba(16, 185, 129, 0.2);
 }
 
 *, *::before, *::after {
@@ -59,7 +52,7 @@ button, a, input, select, textarea {
 /* Custom inputs styling */
 input, select, textarea {
   background-color: var(--bg-base);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-main);
   color: var(--text-primary);
   border-radius: 4px;
 }
@@ -67,11 +60,4 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--primary);
-}
-
-/* Subtle dark card helper */
-.stitch-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
 }

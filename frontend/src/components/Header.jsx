@@ -5,16 +5,16 @@ export default function Header() {
   const navigate = useNavigate();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#262626]">
-      <div className="h-16 w-full px-6 lg:px-12 flex items-center justify-between">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0B0B0B]/95 backdrop-blur-md border-b border-[#303030]">
+      <div className="h-16 w-full px-6 lg:px-10 flex items-center justify-between">
         {/* Brand & Nav */}
-        <div className="flex items-center gap-10">
+        <div className="flex items-center gap-8">
           <Link
             to="/"
-            className="flex items-center gap-1.5 text-white tracking-widest uppercase hover:opacity-90 transition-opacity"
+            className="flex items-center gap-1.5 text-[#F5F5F5] tracking-widest uppercase hover:opacity-90 transition-opacity"
           >
-            <span className="text-lg tracking-[0.22em] font-bold text-white">ALOHOMORA</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#e50914] inline-block mb-1"></span>
+            <span className="text-base tracking-[0.2em] font-bold text-[#F5F5F5]">ALOHOMORA</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#E50914] inline-block mb-0.5"></span>
           </Link>
 
           <nav className="hidden xl:flex items-center gap-6">
@@ -22,10 +22,10 @@ export default function Header() {
               to="/"
               end
               className={({ isActive }) =>
-                `text-sm font-medium transition-colors py-2 ${
+                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
                   isActive
-                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A3A3A3] hover:text-white'
+                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
                 }`
               }
             >
@@ -35,36 +35,36 @@ export default function Header() {
             <NavLink
               to="/jd-intelligence"
               className={({ isActive }) =>
-                `text-sm font-medium transition-colors py-2 ${
+                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
                   isActive
-                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A3A3A3] hover:text-white'
+                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
                 }`
               }
             >
-              JD Intelligence
+              JD Analysis
             </NavLink>
 
             <NavLink
               to="/resume-intelligence"
               className={({ isActive }) =>
-                `text-sm font-medium transition-colors py-2 ${
+                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
                   isActive
-                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A3A3A3] hover:text-white'
+                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
                 }`
               }
             >
-              Resume Intelligence
+              Resume Analysis
             </NavLink>
 
             <NavLink
               to="/candidates"
               className={({ isActive }) =>
-                `text-sm font-medium transition-colors py-2 ${
+                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
                   isActive
-                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A3A3A3] hover:text-white'
+                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
                 }`
               }
             >
@@ -74,10 +74,10 @@ export default function Header() {
             <NavLink
               to="/skill-match"
               className={({ isActive }) =>
-                `text-sm font-medium transition-colors py-2 ${
+                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
                   isActive
-                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A3A3A3] hover:text-white'
+                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
                 }`
               }
             >
@@ -87,10 +87,10 @@ export default function Header() {
             <NavLink
               to="/talent-readiness"
               className={({ isActive }) =>
-                `text-sm font-medium transition-colors py-2 ${
+                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
                   isActive
-                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A3A3A3] hover:text-white'
+                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
                 }`
               }
             >
@@ -100,10 +100,10 @@ export default function Header() {
             <NavLink
               to="/history"
               className={({ isActive }) =>
-                `text-sm font-medium transition-colors py-2 ${
+                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
                   isActive
-                    ? 'text-white border-b-2 border-[#e50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A3A3A3] hover:text-white'
+                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
+                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
                 }`
               }
             >
@@ -113,28 +113,24 @@ export default function Header() {
         </div>
 
         {/* Right Tools */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/candidates')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414] border border-[#262626] text-[#737373] hover:text-white hover:border-[#3a3939] transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414] border border-[#303030] text-[#A0A0A0] hover:text-[#F5F5F5] hover:border-[#404040] transition-all cursor-pointer"
             type="button"
           >
-            <span className="material-symbols-outlined text-[16px]">search</span>
-            <span className="text-xs hidden sm:inline tracking-wider uppercase font-medium">Telemetry Search</span>
-            <kbd className="hidden md:inline text-[10px] px-1.5 py-0.5 rounded bg-[#0A0A0A] text-[#737373] border border-[#262626]">⌘K</kbd>
+            <span className="material-symbols-outlined text-[15px]">search</span>
+            <span className="text-xs hidden sm:inline tracking-wider uppercase font-medium">Search</span>
+            <kbd className="hidden md:inline text-[9px] px-1 py-0.5 rounded bg-[#0B0B0B] text-[#707070] border border-[#303030]">⌘K</kbd>
           </button>
 
-          <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414] border border-[#262626]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-xs text-[#A3A3A3]">Active Session</span>
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#141414] border border-[#303030]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span className="text-xs text-[#A0A0A0]">Online</span>
           </div>
 
-          <div className="flex items-center gap-2 pl-2 border-l border-[#262626]">
-            <div className="hidden sm:flex flex-col text-right">
-              <span className="text-xs text-white font-medium">Talent Ops</span>
-              <span className="text-[10px] text-[#737373] uppercase tracking-wider">Executive</span>
-            </div>
-            <div className="w-8 h-8 rounded bg-[#ffb4aa] flex items-center justify-center font-bold text-[#690003] text-xs">
+          <div className="flex items-center gap-2 pl-2 border-l border-[#303030]">
+            <div className="w-7 h-7 rounded bg-[#1C1C1C] border border-[#303030] flex items-center justify-center font-semibold text-[#F5F5F5] text-xs">
               TO
             </div>
           </div>
