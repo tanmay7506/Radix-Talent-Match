@@ -1,11 +1,32 @@
-import React from 'react';
-import { NavLink, Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 
 export default function Header() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [scrolled, setScrolled] = useState(false);
+  const isHomePage = location.pathname === '/';
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0B0B0B]/95 backdrop-blur-md border-b border-[#303030]">
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        isHomePage && !scrolled
+          ? 'bg-black/20 md:bg-transparent backdrop-blur-[2px]'
+          : 'bg-[#0B0B0B]/90 backdrop-blur-md border-b border-[#303030]'
+      }`}
+    >
+      {/* Restrained thin animated accent border */}
+      <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
+
       <div className="h-16 w-full px-6 lg:px-10 flex items-center justify-between">
         {/* Brand & Nav */}
         <div className="flex items-center gap-8">
@@ -116,7 +137,7 @@ export default function Header() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/candidates')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414] border border-[#303030] text-[#A0A0A0] hover:text-[#F5F5F5] hover:border-[#404040] transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414]/80 border border-[#303030] text-[#A0A0A0] hover:text-[#F5F5F5] hover:border-[#404040] transition-all cursor-pointer"
             type="button"
           >
             <span className="material-symbols-outlined text-[15px]">search</span>
@@ -124,7 +145,7 @@ export default function Header() {
             <kbd className="hidden md:inline text-[9px] px-1 py-0.5 rounded bg-[#0B0B0B] text-[#707070] border border-[#303030]">⌘K</kbd>
           </button>
 
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#141414] border border-[#303030]">
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#141414]/80 border border-[#303030]">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span className="text-xs text-[#A0A0A0]">Online</span>
           </div>
