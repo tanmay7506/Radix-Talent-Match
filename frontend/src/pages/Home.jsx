@@ -58,12 +58,12 @@ export default function Home() {
   return (
     <div className="flex flex-col w-full pb-16">
       {/* Cinematic Hero Section with Background Video */}
-      <section className="relative w-full -mt-16 h-[80vh] min-h-[580px] max-h-[820px] overflow-hidden bg-[#0B0B0B]">
+      <section className="relative w-full -mt-16 h-[80vh] min-h-[580px] max-h-[820px] overflow-hidden bg-[#0B0B0B] border-b border-[#303030]">
         {/* Background Video */}
         {!videoError && (
           <video
             ref={videoRef}
-            className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity duration-1000 ${
+            className={`absolute inset-0 w-full h-full object-cover object-center pointer-events-none transition-opacity duration-700 ${
               videoLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             src="/Home.mp4"
@@ -77,11 +77,11 @@ export default function Home() {
           />
         )}
 
-        {/* Semi-transparent dark overlay (25-30% opacity to keep video bright and recognizable) */}
-        <div className="absolute inset-0 bg-black/30 pointer-events-none" />
+        {/* Strengthened dark overlay (50% opacity) for enhanced foreground contrast & legibility */}
+        <div className="absolute inset-0 bg-black/50 pointer-events-none" />
 
-        {/* Subtle Bottom Gradient fading seamlessly into the page background */}
-        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-[#0B0B0B] via-[#0B0B0B]/70 to-transparent pointer-events-none" />
+        {/* Seamless bottom edge darkening that meets the lower border cleanly */}
+        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
 
         {/* Content Container (Positioned above video & overlay) */}
         <div className="relative z-10 h-full max-w-[1400px] mx-auto px-6 lg:px-10 flex flex-col justify-center pt-20 sm:pt-24">
