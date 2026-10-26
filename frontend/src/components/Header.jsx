@@ -1,162 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useRef } from 'react'
+import { gsap } from 'gsap'
+import './Header.css'
 
 export default function Header() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [scrolled, setScrolled] = useState(false);
-  const isHomePage = location.pathname === '/';
+  const logoRef = useRef(null)
+  const navRef = useRef(null)
+  const titleRef = useRef(null)
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
+    tl.fromTo(logoRef.current,
+      { opacity: 0, y: -20, scale: 0.8 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.7 }
+    )
+    .fromTo(titleRef.current,
+      { opacity: 0, y: -12 },
+      { opacity: 1, y: 0, duration: 0.6 },
+      '-=0.4'
+    )
+    .fromTo(navRef.current.children,
+      { opacity: 0, y: -10 },
+      { opacity: 1, y: 0, stagger: 0.1, duration: 0.5 },
+      '-=0.4'
+    )
+  }, [])
 
   return (
-    <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isHomePage && !scrolled
-          ? 'bg-black/20 md:bg-transparent backdrop-blur-[2px]'
-          : 'bg-[#0B0B0B]/90 backdrop-blur-md border-b border-[#303030]'
-      }`}
-    >
-      {/* Restrained thin animated accent border */}
-      <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
-
-      <div className="h-16 w-full px-6 lg:px-10 flex items-center justify-between">
-        {/* Brand & Nav */}
-        <div className="flex items-center gap-8">
-          <Link
-            to="/"
-            className="flex items-center gap-1.5 text-[#F5F5F5] tracking-widest uppercase hover:opacity-90 transition-opacity"
-          >
-            <span className="text-base tracking-[0.2em] font-bold text-[#F5F5F5]">ALOHOMORA</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E50914] inline-block mb-0.5"></span>
-          </Link>
-
-          <nav className="hidden xl:flex items-center gap-6">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
-                  isActive
-                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
-                }`
-              }
-            >
-              Home
-            </NavLink>
-
-            <NavLink
-              to="/jd-intelligence"
-              className={({ isActive }) =>
-                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
-                  isActive
-                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
-                }`
-              }
-            >
-              JD Analysis
-            </NavLink>
-
-            <NavLink
-              to="/resume-intelligence"
-              className={({ isActive }) =>
-                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
-                  isActive
-                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
-                }`
-              }
-            >
-              Resume Analysis
-            </NavLink>
-
-            <NavLink
-              to="/candidates"
-              className={({ isActive }) =>
-                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
-                  isActive
-                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
-                }`
-              }
-            >
-              Candidates
-            </NavLink>
-
-            <NavLink
-              to="/skill-match"
-              className={({ isActive }) =>
-                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
-                  isActive
-                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
-                }`
-              }
-            >
-              Skill Match
-            </NavLink>
-
-            <NavLink
-              to="/talent-readiness"
-              className={({ isActive }) =>
-                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
-                  isActive
-                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
-                }`
-              }
-            >
-              Talent Readiness
-            </NavLink>
-
-            <NavLink
-              to="/history"
-              className={({ isActive }) =>
-                `text-xs uppercase tracking-wider font-medium transition-colors py-2 ${
-                  isActive
-                    ? 'text-[#F5F5F5] border-b-2 border-[#E50914] pb-[22px] pt-[22px]'
-                    : 'text-[#A0A0A0] hover:text-[#F5F5F5]'
-                }`
-              }
-            >
-              History
-            </NavLink>
-          </nav>
+    <header className="header neo-card">
+      <div className="header-brand">
+        <div className="header-logo" ref={logoRef}>
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="16" fill="url(#logoGrad)" />
+            <path d="M10 20 L16 12 L22 20" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            <circle cx="16" cy="22" r="1.8" fill="#fff" />
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="32" y2="32">
+                <stop stopColor="#6c63ff" />
+                <stop offset="1" stopColor="#9b8fff" />
+              </linearGradient>
+            </defs>
+          </svg>
         </div>
-
-        {/* Right Tools */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/candidates')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#141414]/80 border border-[#303030] text-[#A0A0A0] hover:text-[#F5F5F5] hover:border-[#404040] transition-all cursor-pointer"
-            type="button"
-          >
-            <span className="material-symbols-outlined text-[15px]">search</span>
-            <span className="text-xs hidden sm:inline tracking-wider uppercase font-medium">Search</span>
-            <kbd className="hidden md:inline text-[9px] px-1 py-0.5 rounded bg-[#0B0B0B] text-[#707070] border border-[#303030]">⌘K</kbd>
-          </button>
-
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#141414]/80 border border-[#303030]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span className="text-xs text-[#A0A0A0]">Online</span>
-          </div>
-
-          <div className="flex items-center gap-2 pl-2 border-l border-[#303030]">
-            <div className="w-7 h-7 rounded bg-[#1C1C1C] border border-[#303030] flex items-center justify-center font-semibold text-[#F5F5F5] text-xs">
-              TO
-            </div>
-          </div>
-        </div>
+        <span className="header-title" ref={titleRef}>ResumeAI</span>
       </div>
+      <nav className="header-nav" ref={navRef}>
+        <a href="#upload" className="nav-link">Upload</a>
+        <a href="#profile" className="nav-link">Profile</a>
+        <a href="#skills" className="nav-link">Skills</a>
+        <a href="#talent-check" className="nav-link">Talent Check</a>
+      </nav>
     </header>
-  );
+  )
 }
