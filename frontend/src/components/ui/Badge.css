@@ -31,14 +31,14 @@
 
 /* ─── Variants ──────────────────────────────────────────────────────────── */
 .ui-badge-default {
-  background: rgba(94, 94, 94, 0.16);
-  color: #EDEDED;
+  background: rgba(217, 170, 144, 0.28);
+  color: #02000D;
   border: 1px solid var(--border);
 }
 
 .ui-badge-accent {
-  background: rgba(94, 94, 94, 0.28);
-  color: #FFFFFF;
+  background: rgba(217, 170, 144, 0.4);
+  color: #02000D;
   border: 1px solid var(--color-secondary);
 }
 
@@ -75,8 +75,8 @@
   font-weight: var(--weight-medium);
   padding: 5px 12px;
   border-radius: var(--radius-full);
-  background: rgba(94, 94, 94, 0.14);
-  color: #EDEDED;
+  background: rgba(217, 170, 144, 0.24);
+  color: #02000D;
   border: 1px solid var(--border);
   transition: all var(--transition-fast);
   line-height: 1.3;
@@ -89,11 +89,11 @@ button.ui-tag {
 
 .ui-tag:hover {
   border-color: var(--color-secondary);
-  background: rgba(94, 94, 94, 0.22);
+  background: rgba(217, 170, 144, 0.34);
 }
 
 .ui-tag-active {
   background: var(--color-secondary);
-  color: #FFFFFF;
-  border-color: rgba(255, 255, 255, 0.2);
+  color: #02000D;
+  border-color: rgba(217, 170, 144, 0.30);
 }

@@ -59,7 +59,7 @@ class Skill(BaseModel):
         "System Design",
         "Networking",
         "Operating Systems",
-        "other",
+        "Outside These Category",
     ]
     skill_code: SkillCode
     skill_level: int = Field(ge=1, le=10)

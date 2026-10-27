@@ -19,9 +19,9 @@
   width: 56px;
   height: 56px;
   border-radius: var(--radius-sm);
-  background: rgba(94, 94, 94, 0.14);
+  background: rgba(217, 170, 144, 0.24);
   border: 1px solid var(--border);
-  color: #EDEDED;
+  color: #02000D;
   display: flex;
   align-items: center;
   justify-content: center;

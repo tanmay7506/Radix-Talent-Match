@@ -33,12 +33,12 @@
 }
 
 .ui-callout-body {
-  color: #EDEDED;
+  color: #02000D;
 }
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 .ui-callout-info {
-  background: rgba(94, 94, 94, 0.14);
+  background: rgba(217, 170, 144, 0.24);
   border: 1px solid var(--border);
 }
 .ui-callout-info .ui-callout-icon {

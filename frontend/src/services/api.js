@@ -97,6 +97,34 @@ async function postJson(endpoint, data, signal) {
   }
 }
 
+async function getJson(endpoint, signal) {
+  const url = `${API_BASE_URL}${endpoint}`
+  try {
+    const res = await fetch(url, { signal })
+    if (!res.ok) {
+      notifySessionExpired(res)
+      let errorDetail = res.statusText
+      try {
+        const errorData = await res.json()
+        if (errorData?.detail) {
+          errorDetail = typeof errorData.detail === 'string'
+            ? errorData.detail
+            : JSON.stringify(errorData.detail)
+        }
+      } catch {
+        // Fallback to res.statusText
+      }
+      throw new Error(`Server returned ${res.status}: ${errorDetail}`)
+    }
+    return await res.json()
+  } catch (err) {
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      throw new Error(`Unable to connect to RADIX backend at ${API_BASE_URL}. Ensure the backend server is running.`)
+    }
+    throw err
+  }
+}
+
 export const api = {
   baseUrl: API_BASE_URL,
 
@@ -141,5 +169,16 @@ export const api = {
       candidate_profile: candidateProfile,
       jd_skills: jdSkills,
     }, signal)
+  },
+
+  /** Retrieve companies available to the talent-check assessment. */
+  async getTalentCheckCompanies({ signal } = {}) {
+    return await getJson('/talent-check/companies', signal)
+  },
+
+  /** Assess a candidate profile against one company's requirements. */
+  async runTalentCheck(profile, companyId, { signal } = {}) {
+    const company = encodeURIComponent(companyId)
+    return await postJson(`/talent-check?company_id=${company}`, { profile }, signal)
   },
 }

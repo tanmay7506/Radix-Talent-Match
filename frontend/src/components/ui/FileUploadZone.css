@@ -28,7 +28,7 @@
 
 .ui-upload-zone:hover {
   border-color: var(--color-secondary);
-  background: rgba(94, 94, 94, 0.08);
+  background: rgba(217, 170, 144, 0.16);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
@@ -39,8 +39,8 @@
 }
 
 .ui-upload-dragging {
-  border-color: #EDEDED;
-  background: rgba(94, 94, 94, 0.22);
+  border-color: var(--color-secondary);
+  background: rgba(217, 170, 144, 0.34);
   box-shadow: var(--shadow-md);
 }
 
@@ -59,12 +59,12 @@
   width: 52px;
   height: 52px;
   border-radius: var(--radius-sm);
-  background: rgba(94, 94, 94, 0.16);
+  background: rgba(217, 170, 144, 0.28);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #EDEDED;
+  color: #02000D;
   margin-bottom: var(--space-3);
   transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
@@ -76,9 +76,9 @@
 }
 
 .ui-upload-zone:hover .ui-upload-icon-wrap {
-  background: rgba(94, 94, 94, 0.28);
+  background: rgba(217, 170, 144, 0.4);
   border-color: var(--color-secondary);
-  color: #FFFFFF;
+  color: #02000D;
 }
 
 .ui-upload-body {
@@ -108,9 +108,9 @@
   font-weight: var(--weight-medium);
   padding: 3px 12px;
   border-radius: var(--radius-full);
-  background: rgba(94, 94, 94, 0.2);
+  background: rgba(217, 170, 144, 0.32);
   border: 1px solid var(--border);
-  color: #EDEDED;
+  color: #02000D;
   max-width: 90%;
   overflow: hidden;
   text-overflow: ellipsis;

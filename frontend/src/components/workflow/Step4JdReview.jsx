@@ -61,6 +61,35 @@ export function Step4JdReview({
             </Callout>
 
             <div className="jd-review-grid">
+              {/* Specific Technologies Card */}
+              <Card padding="md">
+                <CardHeader>
+                  <div className="card-header-with-badge">
+                    <CardTitle as="h3">Named Technologies &amp; Tools</CardTitle>
+                    <Badge variant="subtle" size="sm">
+                      {technologies.length} Tools
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    Frameworks, languages, cloud platforms, and databases requested.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {technologies.length > 0 ? (
+                    <div className="tech-tags-flow">
+                      {technologies.map((tool) => (
+                        <Tag key={tool} className="tech-tool-pill">
+                          <TagIcon size={11} className="pill-icon" aria-hidden="true" />
+                          {tool}
+                        </Tag>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="empty-subtext">No specific tools or frameworks explicitly identified.</p>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* RADIX Categories Card */}
               <Card padding="md">
                 <CardHeader>
@@ -93,35 +122,6 @@ export function Step4JdReview({
                     </div>
                   ) : (
                     <p className="empty-subtext">No general competency categories were extracted.</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Specific Technologies Card */}
-              <Card padding="md">
-                <CardHeader>
-                  <div className="card-header-with-badge">
-                    <CardTitle as="h3">Named Technologies &amp; Tools</CardTitle>
-                    <Badge variant="subtle" size="sm">
-                      {technologies.length} Tools
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    Frameworks, languages, cloud platforms, and databases requested.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {technologies.length > 0 ? (
-                    <div className="tech-tags-flow">
-                      {technologies.map((tool) => (
-                        <Tag key={tool} className="tech-tool-pill">
-                          <TagIcon size={11} className="pill-icon" aria-hidden="true" />
-                          {tool}
-                        </Tag>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="empty-subtext">No specific tools or frameworks explicitly identified.</p>
                   )}
                 </CardContent>
               </Card>

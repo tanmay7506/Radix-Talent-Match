@@ -7,7 +7,8 @@ const STEPS = [
   { id: 3, label: 'Job Description', short: 'JD' },
   { id: 4, label: 'JD Analysis', short: 'Analysis' },
   { id: 5, label: 'Skill Match', short: 'Matching' },
-  { id: 6, label: 'Results', short: 'Results' },
+  { id: 6, label: 'Talent Check', short: 'Talent' },
+  { id: 7, label: 'Results', short: 'Results' },
 ]
 
 export function WizardStepper({

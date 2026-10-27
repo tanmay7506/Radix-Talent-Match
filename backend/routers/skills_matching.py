@@ -1,11 +1,15 @@
 
 from difflib import SequenceMatcher
+import asyncio
+import json
 import re
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from functions.models import model_genai
+from langchain_core.prompts import ChatPromptTemplate
 from utils.extract_data import ProfileResponseModel
 
 
@@ -285,151 +289,70 @@ def recommendation_for(skill_name: str) -> str:
     "/analyze",
     response_model=SkillMatchingResponse,
 )
-def analyze_skill_match(
+async def analyze_skill_match(
     request: SkillMatchingRequest,
 ) -> SkillMatchingResponse:
     requirements = flatten_job_skills(request.jd_skills)
     evidence_items = candidate_evidence(request.candidate_profile)
 
-    matched: list[MatchedSkill] = []
-    missing: list[MissingSkill] = []
-    gaps: list[SkillGap] = []
-    recommendations: list[Recommendation] = []
-    ambiguity_alerts: list[str] = []
-
     if not requirements:
-        ambiguity_alerts.append(
-            "The JD extraction returned no skills. Check the extracted JD data."
+        return SkillMatchingResponse(
+            jd_source_file=request.jd_source_file,
+            match_score=0.0,
+            matched_skills=[],
+            missing_skills=[],
+            skill_gaps=[],
+            recommendations=[],
+            match_confidence="low",
+            ambiguity_alerts=[
+                "The JD extraction returned no skills. Check the extracted JD data."
+            ],
         )
 
-    weighted_score = 0.0
-
-    for requirement in requirements:
-        skill_name = requirement["skill_name"]
-        best_match = None
-        best_score = 0.0
-        best_type = None
-
-        for evidence in evidence_items:
-            score, match_type = compare_skill(
-                skill_name,
-                evidence["text"],
-            )
-
-            if score > best_score:
-                best_score = score
-                best_match = evidence
-                best_type = match_type
-
-        # Avoid accepting weak fuzzy matches as confirmed matches.
-        if best_match is not None and best_type is not None:
-            if best_type in ("exact", "synonym") or best_score >= 0.86:
-                candidate_confidence = best_match["confidence"].lower()
-
-                if best_type == "exact":
-                    match_confidence = "high"
-                    quality_weight = 1.0
-                elif best_type == "synonym":
-                    match_confidence = "high"
-                    quality_weight = 0.95
-                else:
-                    match_confidence = "medium"
-                    quality_weight = best_score
-
-                if candidate_confidence == "low":
-                    match_confidence = "low"
-                    quality_weight *= 0.75
-                elif candidate_confidence == "medium":
-                    quality_weight *= 0.9
-
-                weighted_score += quality_weight
-
-                matched.append(MatchedSkill(
-                    skill_name=skill_name,
-                    category_code=requirement["category_code"],
-                    match_type=best_type,
-                    candidate_evidence=best_match["text"],
-                    candidate_confidence=best_match["confidence"],
-                    candidate_skill_level=best_match["level"],
-                    match_confidence=match_confidence,
-                ))
-                continue
-
-        priority = priority_for(requirement)
-        reason = (
-            "The available profile evidence does not clearly demonstrate "
-            "this requirement. It may still be a skill the candidate has."
-        )
-
-        missing.append(MissingSkill(
-            skill_name=skill_name,
-            category_code=requirement["category_code"],
-            priority=priority,
-            reason=reason,
-        ))
-
-        action = recommendation_for(skill_name)
-        gaps.append(SkillGap(
-            skill_name=skill_name,
-            priority=priority,
-            suggested_action=action,
-        ))
-        recommendations.append(Recommendation(
-            skill_name=skill_name,
-            action=action,
-        ))
-
-    match_score = (
-        round(weighted_score / len(requirements) * 100, 1)
-        if requirements
-        else 0.0
+    structured_model = model_genai.with_structured_output(SkillMatchingResponse)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You assess candidate evidence against job skill requirements. "
+                "Use only the supplied requirements and candidate evidence. "
+                "A skill is matched only when the evidence directly supports it; "
+                "do not infer skills from category labels or unrelated experience. "
+                "For matched_skills, copy candidate_evidence verbatim from one "
+                "provided evidence item and use its confidence and level. "
+                "Include every requirement exactly once, either matched or missing. "
+                "Use exact for direct wording, synonym for a clear equivalent, "
+                "and fuzzy only for a close but uncertain wording match. "
+                "Set match_score from 0 to 100 based on the supported requirements. "
+                "Return concise, actionable recommendations and note uncertainty "
+                "in ambiguity_alerts."
+            ),
+            (
+                "human",
+                "JD source: {jd_source_file}\n"
+                "Requirements (JSON): {requirements}\n"
+                "Candidate evidence (JSON): {evidence}\n\n"
+                "Return the complete skill matching assessment."
+            ),
+        ]
     )
+    chain = prompt | structured_model
 
-    if not evidence_items and requirements:
-        ambiguity_alerts.append(
-            "The candidate profile contains no searchable evidence. "
-            "Results may understate the candidate's actual skills."
+    try:
+        result = await asyncio.to_thread(
+            chain.invoke,
+            {
+                "jd_source_file": request.jd_source_file,
+                "requirements": json.dumps(requirements, ensure_ascii=False),
+                "evidence": json.dumps(evidence_items, ensure_ascii=False),
+            },
         )
+        result = SkillMatchingResponse.model_validate(result)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Skill matching model failed: {error}",
+        ) from error
 
-    if any(item.match_type == "fuzzy" for item in matched):
-        ambiguity_alerts.append(
-            "Some matches are fuzzy text matches. Review their evidence "
-            "before treating them as confirmed."
-        )
-
-    if missing:
-        ambiguity_alerts.append(
-            "The JD extraction does not distinguish required from preferred "
-            "skills. Gap priorities are provisional: separately listed "
-            "technologies are high priority and categorized skills are medium."
-        )
-
-    if requirements and not request.jd_skills.technologies:
-        ambiguity_alerts.append(
-            "The JD has no separate technology list; matching is based "
-            "on its extracted category skills."
-        )
-
-    if len(requirements) < 3:
-        ambiguity_alerts.append(
-            "The JD contains very few extracted requirements, so the "
-            "match score may not represent the full role."
-        )
-
-    if not matched:
-        overall_confidence = "low"
-    elif ambiguity_alerts:
-        overall_confidence = "medium"
-    else:
-        overall_confidence = "high"
-
-    return SkillMatchingResponse(
-        jd_source_file=request.jd_source_file,
-        match_score=match_score,
-        matched_skills=matched,
-        missing_skills=missing,
-        skill_gaps=gaps,
-        recommendations=recommendations,
-        match_confidence=overall_confidence,
-        ambiguity_alerts=ambiguity_alerts,
-    )
+    result.jd_source_file = request.jd_source_file
+    return result

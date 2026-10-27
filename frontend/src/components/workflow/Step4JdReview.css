@@ -22,7 +22,7 @@
 
 .jd-review-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: var(--space-5);
 }
 
@@ -51,7 +51,7 @@
 .category-title {
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
-  color: #FFFFFF;
+  color: #02000D;
 }
 
 .category-count {
@@ -73,7 +73,7 @@
 
 .tech-tool-pill {
   border-color: var(--color-secondary);
-  background: rgba(94, 94, 94, 0.2);
+  background: rgba(217, 170, 144, 0.32);
   display: inline-flex;
   align-items: center;
   gap: 4px;

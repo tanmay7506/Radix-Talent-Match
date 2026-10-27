@@ -244,9 +244,9 @@
   font-weight: var(--weight-bold);
   padding: 3px 6px;
   border-radius: var(--radius-xs);
-  background: rgba(94, 94, 94, 0.25);
+  background: rgba(217, 170, 144, 0.36);
   border: 1px solid var(--border);
-  color: #FFFFFF;
+  color: #02000D;
 }
 
 .skill-title-group {
@@ -275,14 +275,14 @@
   gap: 2px;
   padding: 4px 10px;
   border-radius: var(--radius-sm);
-  background: rgba(94, 94, 94, 0.16);
+  background: rgba(217, 170, 144, 0.28);
   border: 1px solid var(--border);
 }
 
 .level-num {
   font-size: var(--text-sm);
   font-weight: var(--weight-extrabold);
-  color: #FFFFFF;
+  color: #02000D;
 }
 
 .level-denom {
@@ -324,7 +324,7 @@
 .skill-delete-btn:hover {
   background: var(--error-bg);
   border-color: var(--error);
-  color: #FFFFFF;
+  color: #02000D;
 }
 
 @media (max-width: 900px) {
