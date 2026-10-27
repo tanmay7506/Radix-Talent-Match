@@ -101,6 +101,61 @@ def fetch_all_companies(force_refresh: bool = False) -> list[dict[str, Any]]:
         raise RuntimeError(f"Could not load companies from Supabase: {err}") from err
 
 
+def fetch_company_matching_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Fetch the existing company directory and relational skill requirements."""
+    companies = fetch_all_companies()
+    url, _ = get_supabase_credentials()
+    skill_response = requests.get(
+        f"{url}/rest/v1/skill_set_master",
+        params={"select": "skill_set_id,short_name,skill_set_name", "order": "skill_set_id.asc"},
+        headers=_get_headers(),
+        timeout=10,
+    )
+    skill_response.raise_for_status()
+    skill_sets = skill_response.json()
+    if not isinstance(skill_sets, list):
+        raise RuntimeError("Supabase returned an invalid skill_set_master response.")
+
+    company_ids = [company["company_id"] for company in companies if company.get("company_id") is not None]
+    requirements_by_company: dict[Any, dict[int, int]] = {company_id: {} for company_id in company_ids}
+    # Keep each relation request below PostgREST's usual 1,000-row response cap.
+    for offset in range(0, len(company_ids), 50):
+        company_batch = company_ids[offset : offset + 50]
+        id_filter = f"in.({','.join(str(int(company_id)) for company_id in company_batch)})"
+        requirement_response = requests.get(
+            f"{url}/rest/v1/company_skill_levels",
+            params={
+                "select": "company_id,skill_set_id,required_level",
+                "company_id": id_filter,
+                "order": "company_id.asc,skill_set_id.asc",
+            },
+            headers=_get_headers(),
+            timeout=10,
+        )
+        requirement_response.raise_for_status()
+        requirement_rows = requirement_response.json()
+        if not isinstance(requirement_rows, list):
+            raise RuntimeError("Supabase returned an invalid company_skill_levels response.")
+        for row in requirement_rows:
+            company_requirements = requirements_by_company.get(row.get("company_id"))
+            try:
+                skill_id = int(row["skill_set_id"])
+                level = int(row["required_level"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if company_requirements is not None and 1 <= level <= 10:
+                company_requirements[skill_id] = level
+
+    enriched_companies = []
+    for company in companies:
+        company_id = company.get("company_id")
+        enriched_companies.append({
+            **company,
+            "skill_requirements": requirements_by_company.get(company_id, {}),
+        })
+    return skill_sets, enriched_companies
+
+
 def fetch_company_requirements(
     company_id_or_name: int | str,
 ) -> tuple[dict[str, Any], dict[str, int]]:

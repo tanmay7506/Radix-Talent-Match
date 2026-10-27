@@ -1,15 +1,20 @@
-from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
+import asyncio
+import hashlib
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from functions.prompts import jd_extraction_prompt
 from utils.extract_data import extract_data
 from utils.parse_document import parse_document
+from utils.response_cache import get_cached, set_cached
 
 
 jd_analytics_router = APIRouter(prefix="/jd")
 
 
 class SkillExtractionOutput(BaseModel):
+    company_name: str
     radix_categories: dict[str, list[str]] = Field(
         description="A dictionary mapping the 12 RADIX skill categories to the specific skills found in the JD."
     )
@@ -26,12 +31,22 @@ async def extract_skills(file: UploadFile = File(...)):
 
     if not content:
         raise HTTPException(status_code=400, detail="Empty files are not allowed")
+    cache_inputs = {
+        "filename": file.filename,
+        "content_sha256": hashlib.sha256(content).hexdigest(),
+    }
+    cached = await asyncio.to_thread(get_cached, "jd-extract-skills", cache_inputs)
+    if cached is not None:
+        return SkillExtractionOutput.model_validate(cached)
+
     jd_text = parse_document(content, file.filename)
     if not jd_text.strip():
         raise HTTPException(status_code=400, detail="Text could not be parsed")
 
-    return await extract_data(
+    result = await extract_data(
         data_dump=jd_text,
         prompt=jd_extraction_prompt,
         pydantic_model=SkillExtractionOutput,
     )
+    await asyncio.to_thread(set_cached, "jd-extract-skills", cache_inputs, result)
+    return result

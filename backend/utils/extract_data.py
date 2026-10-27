@@ -2,65 +2,19 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Literal
-
 from pydantic import BaseModel, Field
+from functions.skill_categories import PROFILE_SKILL_CODES, SkillCode, SkillName
 from functions.models import model, model_genai
 from langchain_core.prompts import ChatPromptTemplate
-
-SkillCode = Literal[
-    "COD",
-    "DSA",
-    "OOD",
-    "APT",
-    "COM",
-    "AI",
-    "CLD",
-    "SQL",
-    "SWE",
-    "SYS",
-    "NET",
-    "OS",
-    "OTH",
-]
 
 MODEL_EXECUTOR = ThreadPoolExecutor(
     max_workers=4,
     thread_name_prefix="model-call",
 )
 
-SKILL_CODES: dict[str, SkillCode] = {
-    "Coding": "COD",
-    "Data Structures & Algorithms": "DSA",
-    "Object-Oriented Design": "OOD",
-    "Aptitude": "APT",
-    "Communication": "COM",
-    "Artificial Intelligence": "AI",
-    "Cloud": "CLD",
-    "SQL": "SQL",
-    "Software Engineering": "SWE",
-    "System Design": "SYS",
-    "Networking": "NET",
-    "Operating Systems": "OS",
-    "Outside These Category": "OTH",
-}
-
 
 class Skill(BaseModel):
-    skill_name: Literal[
-        "Coding",
-        "Data Structures & Algorithms",
-        "Object-Oriented Design",
-        "Aptitude",
-        "Communication",
-        "Artificial Intelligence",
-        "Cloud",
-        "SQL",
-        "Software Engineering",
-        "System Design",
-        "Networking",
-        "Operating Systems",
-        "Outside These Category",
-    ]
+    skill_name: SkillName
     skill_code: SkillCode
     skill_level: int = Field(ge=1, le=10)
     evidence: list[str]
@@ -88,7 +42,7 @@ class ProfileResponseModel(BaseModel):
 
 def map_skill_metadata(profile: ProfileResponseModel) -> ProfileResponseModel:
     for skill in profile.skills:
-        skill.skill_code = SKILL_CODES[skill.skill_name]
+        skill.skill_code = PROFILE_SKILL_CODES[skill.skill_name]
     return profile
 
 

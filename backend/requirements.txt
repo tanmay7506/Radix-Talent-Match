@@ -199,6 +199,8 @@ pygments==2.21.0
     # via rich
 pypdf==6.21.2
     # via backend (pyproject.toml)
+redis==8.1.0
+    # via backend (pyproject.toml)
 python-docx==1.2.0
     # via backend (pyproject.toml)
 python-dotenv==1.2.4

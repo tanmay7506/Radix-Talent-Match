@@ -26,10 +26,23 @@ export function Step6TalentCheck({ profile, jdData, onBack, onComplete }) {
           setError('No companies are available for the talent check.')
           return
         }
-        const targetCompany = String(jdData?.company || jdData?.company_name || '').trim().toLowerCase()
-        const matchingCompany = availableCompanies.find((company) =>
-          [company.name, company.short_name].some((name) => String(name || '').trim().toLowerCase() === targetCompany)
-        )
+        const normalizeCompanyName = (name) => String(name || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()
+        const targetCompany = normalizeCompanyName(jdData?.company || jdData?.company_name)
+        const companyNames = availableCompanies.flatMap((company) => [company.name, company.short_name]
+          .filter(Boolean)
+          .map((name) => ({ company, name: normalizeCompanyName(name) })))
+        const exactMatch = companyNames.find(({ name }) => name && name === targetCompany)
+        const targetWords = new Set(targetCompany.split(/\s+/).filter((word) => word.length > 1))
+        const bestMatch = exactMatch || companyNames
+          .map((candidate) => {
+            const candidateWords = new Set(candidate.name.split(/\s+/).filter((word) => word.length > 1))
+            const sharedWords = [...targetWords].filter((word) => candidateWords.has(word)).length
+            const score = sharedWords / Math.max(targetWords.size, candidateWords.size, 1)
+            return { ...candidate, score }
+          })
+          .filter((candidate) => candidate.score >= 0.6)
+          .sort((left, right) => right.score - left.score)[0]
+        const matchingCompany = bestMatch?.company
         setSelectedCompany((current) => current || (matchingCompany ? String(matchingCompany.company_id) : ''))
       })
       .catch((err) => {

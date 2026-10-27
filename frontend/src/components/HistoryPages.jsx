@@ -171,6 +171,7 @@ export function SavedResultPage() {
     <Step6Results
       matchResult={item.matchResult || item.match_result || item.result || item}
       profile={item.profile || {}}
+      stackSkillColumns
       onStartNew={() => navigate({ to: '/match' })}
       onEditProfile={() => navigate({ to: '/profile' })}
       onChangeJd={() => navigate({ to: '/match' })}

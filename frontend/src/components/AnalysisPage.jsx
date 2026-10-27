@@ -42,12 +42,21 @@ export default function AnalysisPage({ profile, jdData, onNavigate }) {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
     const ctx = gsap.context(() => {
-      gsap.fromTo('.analysis-page-header, .analysis-tab-content',
-        { opacity: 0, y: 16 },
-        { opacity: 1, y: 0, duration: 0.42, stagger: 0.08, ease: 'power2.out' })
+      gsap.fromTo('.analysis-page-header',
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' })
     }, pageRef)
     return () => ctx.revert()
   }, [])
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
+    const ctx = gsap.context(() => {
+      gsap.fromTo('.analysis-tab-content',
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.28, ease: 'power2.out' })
+    }, pageRef)
+    return () => ctx.revert()
+  }, [activeTab])
   return (
     <div className="analysis-page" ref={pageRef}>
       <div className="analysis-page-header"><PageHeader

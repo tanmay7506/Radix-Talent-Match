@@ -181,4 +181,9 @@ export const api = {
     const company = encodeURIComponent(companyId)
     return await postJson(`/talent-check?company_id=${company}`, { profile }, signal)
   },
+
+  /** Rank companies using the current assessed candidate skills. */
+  async getCompanyMatches(skills, { signal } = {}) {
+    return await postJson('/company-matches', { skills }, signal)
+  },
 }
