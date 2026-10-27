@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { gsap } from 'gsap'
 import {
   Check,
   X,
@@ -21,11 +22,22 @@ export function Step6Results({
   onStartNew,
   onEditProfile,
   onChangeJd,
+  onViewCompanyMatches,
   talentResult = null,
   stepNumber = 6,
   stackSkillColumns = false,
 }) {
   const [activeResultTab, setActiveResultTab] = useState('skill')
+  const resultsRef = useRef(null)
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
+    const context = gsap.context(() => {
+      gsap.fromTo('.results-grid > *:not(.results-navigation-footer)',
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.28, stagger: 0.05, ease: 'power2.out', clearProps: 'transform,opacity' })
+    }, resultsRef)
+    return () => context.revert()
+  }, [activeResultTab])
   if (!matchResult) return null
 
   const score = typeof matchResult.match_score === 'number' ? Math.round(matchResult.match_score) : 0
@@ -54,7 +66,7 @@ export function Step6Results({
       : 'warning'
 
   return (
-    <div className="wizard-step-container">
+    <div className="wizard-step-container" ref={resultsRef}>
       <div className="results-header-banner">
         <div>
           <h2>{talentResult ? `Step ${stepNumber}: Combined Match Results` : `Step ${stepNumber}: Role Alignment & Skill Gap Report`}</h2>
@@ -63,6 +75,11 @@ export function Step6Results({
           </p>
         </div>
         <div className="results-header-actions">
+          {stepNumber === 7 && onViewCompanyMatches && (
+            <Button variant="secondary" size="sm" onClick={onViewCompanyMatches} icon={<Building2 size={14} />}>
+              Company Matches
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"

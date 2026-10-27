@@ -1,59 +1,23 @@
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
+from functions.skill_categories import TALENT_CATEGORY_ALIASES, TALENT_CATEGORIES
 
 
-SkillCategory = Literal[
-    "COD",
-    "DSA",
-    "OOD",
-    "APTI",
-    "COMM",
-    "AI",
-    "CLOUD",
-    "SQL",
-    "SWE",
-    "SYSD",
-    "NETW",
-    "OS",
-    "OTHER",
-]
+SkillCategory = Literal[*TALENT_CATEGORIES, "OTHER"]
 
 
-# Maps the skill/category names used by Role 3 to RADIX codes.
-CATEGORY_ALIASES = {
-    "coding": "COD",
-    "programming": "COD",
-    "data structures & algorithms": "DSA",
-    "data structures and algorithms": "DSA",
-    "dsa": "DSA",
-    "object-oriented design": "OOD",
-    "object oriented design": "OOD",
-    "aptitude": "APTI",
-    "communication": "COMM",
-    "artificial intelligence": "AI",
-    "cloud": "CLOUD",
-    "sql": "SQL",
-    "software engineering": "SWE",
-    "system design": "SYSD",
-    "networking": "NETW",
-    "operating systems": "OS",
-    "outside these category": "OTHER",
-    "other": "OTHER",
-    "net": "NETW",
-    "sys": "SYSD",
-    "com": "COMM",
-    "db": "SQL",
-    "database": "SQL",
-    "databases": "SQL",
-    "devops": "SWE",
-    "test": "SWE",
-    "testing": "SWE",
-    "sec": "OTHER",
-    "security": "OTHER",
-    "apt": "APTI",
-    "cld": "CLOUD",
-}
+def normalize_category(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower().replace("&", " and ")
+    normalized = re.sub(r"[-_/]+", " ", normalized)
+    normalized = re.sub(r"[^a-z0-9 ]", "", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if normalized.upper() in (*TALENT_CATEGORIES, "OTHER"):
+        return normalized.upper()
+    return TALENT_CATEGORY_ALIASES.get(normalized)
 
 
 class Skill(BaseModel):
@@ -74,10 +38,26 @@ class Skill(BaseModel):
         data = data.copy()
 
         # Read Role 3's skill name
-        if "skill_name" not in data:
-            data["skill_name"] = (
-                data.get("name") or data.get("skill") or data.get("category")
-            )
+        normalized_keys = {
+            str(key).strip().lower().replace("-", "_").replace(" ", "_"): value
+            for key, value in data.items()
+        }
+        for field, aliases in {
+            "skill_name": ("skill_name", "skill", "name"),
+            "level": ("skill_level", "level", "proficiency_level"),
+            "evidence": ("evidence", "proof", "description"),
+            "confidence": ("confidence", "certainty"),
+            "category_code": (
+                "skill_code",
+                "category_code",
+                "category",
+                "skill_category",
+            ),
+        }.items():
+            if field not in data:
+                data[field] = next(
+                    (normalized_keys[a] for a in aliases if a in normalized_keys), None
+                )
 
         # Map Role 3's skill level to Role 4's level
         if "level" not in data:
@@ -88,7 +68,9 @@ class Skill(BaseModel):
             data["evidence"] = data.get("proof", "")
 
         if isinstance(data.get("evidence"), list):
-            data["evidence"] = "\n".join(str(item) for item in data["evidence"])
+            if not all(isinstance(item, str) for item in data["evidence"]):
+                raise ValueError("Evidence must contain only text.")
+            data["evidence"] = "\n".join(data["evidence"])
 
         # Normalize confidence: High -> high
         confidence = data.get("confidence", "medium")
@@ -104,28 +86,9 @@ class Skill(BaseModel):
         )
 
         if isinstance(category, str):
-            normalized = category.strip().lower()
-            data["category_code"] = CATEGORY_ALIASES.get(
-                normalized,
-                category.strip().upper()
-                if category.strip().upper()
-                in {
-                    "COD",
-                    "DSA",
-                    "OOD",
-                    "APTI",
-                    "COMM",
-                    "AI",
-                    "CLOUD",
-                    "SQL",
-                    "SWE",
-                    "SYSD",
-                    "NETW",
-                    "OS",
-                    "OTHER",
-                }
-                else None,
-            )
+            data["category_code"] = normalize_category(category)
+            if data["category_code"] is None:
+                data["category_code"] = normalize_category(data.get("skill_name"))
 
         return data
 
@@ -137,12 +100,41 @@ class CandidateProfile(BaseModel):
     email: str
     # Accept the existing string or the updated education object.
     education: str | dict[str, Any] = ""
-    skills: list[Skill] = Field(default_factory=list)
+    skills: list[Skill]
     hackathons: list = Field(default_factory=list)
     internships: list = Field(default_factory=list)
     certifications: list = Field(default_factory=list)
     preferred_roles: list[str] = Field(default_factory=list)
     cv_file: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_input(cls, data):
+        if not isinstance(data, dict):
+            return data
+        data = data.copy()
+        keys = {
+            str(k).strip().lower().replace("-", "_").replace(" ", "_"): v
+            for k, v in data.items()
+        }
+        for field, aliases in {
+            "name": ("name", "candidate_name"),
+            "email": ("email", "email_address"),
+            "education": ("education", "qualification"),
+            "skills": ("skills", "skillset", "skill_set"),
+            "certifications": ("certifications", "certificates"),
+            "preferred_roles": ("preferred_roles", "preferred_role", "roles"),
+            "cv_file": ("cv_file", "resume_file", "resume"),
+        }.items():
+            if field not in data:
+                value = next((keys[a] for a in aliases if a in keys), None)
+                if value is not None:
+                    data[field] = value
+        for wrapper in ("profile", "candidate_profile", "candidate"):
+            nested = keys.get(wrapper)
+            if isinstance(nested, dict):
+                return nested
+        return data
 
 
 class SkillsetGap(BaseModel):
@@ -184,5 +176,20 @@ class TalentCheckResponse(BaseModel):
 class TalentCheckRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    company: str = Field(min_length=1)
+    company: str | None = Field(default=None, min_length=1)
+    company_id: int | None = None
     profile: CandidateProfile
+
+    @model_validator(mode="before")
+    @classmethod
+    def extract_profile(cls, data):
+        if not isinstance(data, dict) or "profile" in data:
+            return data
+        request_fields = {"company", "company_id", "role"}
+        return {
+            "company": data.get("company"),
+            "company_id": data.get("company_id"),
+            "profile": {
+                key: value for key, value in data.items() if key not in request_fields
+            },
+        }

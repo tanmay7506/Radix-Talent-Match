@@ -17,6 +17,7 @@ import ProfilePage from './components/ProfilePage'
 import AnalysisPage from './components/AnalysisPage'
 import AnalysisJobDetailsPage from './components/AnalysisJobDetailsPage'
 import { MatchWizard } from './components/workflow/MatchWizard'
+import { CompanyMatchesPage } from './components/workflow/CompanyMatchesPage'
 import { LoginPage, SignupPage } from './components/AuthPages'
 import { MatchHistoryPage, SavedResultPage } from './components/HistoryPages'
 import Chatbot from './components/Chatbot'
@@ -28,7 +29,7 @@ import './App.css'
 function Shell() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { profile, setProfile, session, setSession, loadProfile } = useApp()
+  const { profile, setProfile, jdData, setJdData, session, setSession, loadProfile } = useApp()
   const pageRef = useRef(null)
   const interactiveOrbRef = useRef(null)
   const ambientOrbRef = useRef(null)
@@ -90,7 +91,20 @@ function Shell() {
       <a className="skip-link" href="#main-content">Skip to content</a>
       <Header currentPage={currentPage} user={session?.user} onLogout={logout} />
       <main className="page-content" id="main-content">
-        <div className={`page-inner page-transition${pathname === '/login' ? ' login-page-inner' : ''}`} ref={pageRef}><Outlet /></div>
+        <div className={`page-inner page-transition${pathname === '/login' ? ' login-page-inner' : ''}`} ref={pageRef}>
+          {session?.user && (
+            <div hidden={pathname !== '/match'} aria-hidden={pathname !== '/match'}>
+              <MatchWizard
+                initialProfile={profile}
+                initialJdData={jdData}
+                onProfileSynced={setProfile}
+                onJdSynced={setJdData}
+                onNavigate={(path) => navigate({ to: path })}
+              />
+            </div>
+          )}
+          <Outlet />
+        </div>
       </main>
       <footer className="footer"><span>RADIX Talent Match<span className="accent-dot">.</span></span> · Intelligent talent intelligence platform</footer>
     </div>
@@ -121,15 +135,7 @@ function ProfileRoute() {
 }
 
 function MatchRoute() {
-  const state = useApp()
-  const navigate = useNavigate()
-  return <MatchWizard
-    initialProfile={state.profile}
-    initialJdData={state.jdData}
-    onProfileSynced={state.setProfile}
-    onJdSynced={state.setJdData}
-    onNavigate={(path) => navigate({ to: path })}
-  />
+  return null
 }
 
 function AnalysisRoute() {
@@ -147,6 +153,12 @@ function AnalysisJobDetailsRoute() {
   const state = useApp()
   const navigate = useNavigate()
   return <AnalysisJobDetailsPage jdData={state.jdData} onJdData={state.setJdData} onNavigate={(path) => navigate({ to: path })} />
+}
+
+function CompanyMatchesRoute() {
+  const state = useApp()
+  const navigate = useNavigate()
+  return <CompanyMatchesPage profile={state.profile} onNavigate={(path) => navigate({ to: path })} />
 }
 
 const rootRoute = createRootRouteWithContext()({
@@ -173,6 +185,7 @@ const routes = [
   route('/profile', ProfileRoute, requireUser),
   route('/profile/setup', ProfileRoute, requireUser),
   route('/match', MatchRoute, requireUser),
+  route('/company-matches', CompanyMatchesRoute, requireUser),
   route('/resume', () => null, { beforeLoad: () => { throw redirect({ to: '/analysis' }) } }),
   route('/analysis', AnalysisRoute, requireUser),
   route('/analysis/job-details', AnalysisJobDetailsRoute, requireUser),

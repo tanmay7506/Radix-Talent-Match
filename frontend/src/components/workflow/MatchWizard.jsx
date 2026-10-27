@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { gsap } from 'gsap'
 import { api } from '../../services/api'
 import { profileService } from '../../services/profileService'
 import { resultsService } from '../../services/resultsService'
@@ -22,6 +23,10 @@ export function MatchWizard({
 }) {
   const [currentStep, setCurrentStep] = useState(1)
   const [maxStepReached, setMaxStepReached] = useState(1)
+  const wizardRef = useRef(null)
+  const initialProfileSeededRef = useRef(Boolean(initialProfile))
+  const initialJdSeededRef = useRef(Boolean(initialJdData))
+  const startedNewAnalysisRef = useRef(false)
 
   // ── Step 1 State: Resume ────────────────────────────────────────────────
   const [resumeFile, setResumeFile] = useState(null)
@@ -52,6 +57,32 @@ export function MatchWizard({
   const savedResultRef = useRef(null)
   const controllersRef = useRef({})
   useEffect(() => () => Object.values(controllersRef.current).forEach((controller) => controller.abort()), [])
+
+  useEffect(() => {
+    if (initialProfileSeededRef.current || !initialProfile) return
+    initialProfileSeededRef.current = true
+    if (startedNewAnalysisRef.current || originalProfile || editedProfile) return
+    const profile = JSON.parse(JSON.stringify(initialProfile))
+    setOriginalProfile(profile)
+    setEditedProfile(profile)
+  }, [initialProfile, originalProfile, editedProfile])
+
+  useEffect(() => {
+    if (initialJdSeededRef.current || !initialJdData) return
+    initialJdSeededRef.current = true
+    if (startedNewAnalysisRef.current || jdData) return
+    setJdData(initialJdData)
+  }, [initialJdData, jdData])
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
+    const context = gsap.context(() => {
+      gsap.fromTo('.wizard-step-stage > .wizard-step-container > *',
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.28, stagger: 0.05, ease: 'power2.out', clearProps: 'transform,opacity' })
+    }, wizardRef)
+    return () => context.revert()
+  }, [currentStep])
 
   const handleUseSavedProfile = () => {
     if (!initialProfile) return
@@ -237,6 +268,7 @@ export function MatchWizard({
 
   // ── Step 7: Start New Analysis ──────────────────────────────────────────
   const handleStartNewAnalysis = () => {
+    startedNewAnalysisRef.current = true
     setResumeFile(null)
     setOriginalProfile(null)
     setEditedProfile(null)
@@ -255,7 +287,7 @@ export function MatchWizard({
   }
 
   return (
-    <div className="match-wizard-container">
+    <div className="match-wizard-container" ref={wizardRef}>
       <PageHeader
         title="Candidate &amp; Role Matching Wizard"
         description="A guided multi-step talent intelligence workflow: upload candidate credentials, review structured profile signals, analyze role demands, and evaluate objective competency alignment."
@@ -360,6 +392,7 @@ export function MatchWizard({
             onStartNew={handleStartNewAnalysis}
             onEditProfile={() => goToStep(2)}
             onChangeJd={() => goToStep(3)}
+            onViewCompanyMatches={() => onNavigate('/company-matches')}
           />
         )}
       </div>

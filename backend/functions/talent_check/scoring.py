@@ -3,37 +3,10 @@ from functions.talent_check.schemas import (
     SkillsetGap,
     TalentCheckResponse,
 )
+from functions.skill_categories import TALENT_CATEGORIES, TALENT_CATEGORY_NAMES
 
-
-CATEGORIES = [
-    "COD",
-    "DSA",
-    "OOD",
-    "APTI",
-    "COMM",
-    "AI",
-    "CLOUD",
-    "SQL",
-    "SWE",
-    "SYSD",
-    "NETW",
-    "OS",
-]
-
-CATEGORY_NAMES = {
-    "COD": "Coding",
-    "DSA": "Data Structures & Algorithms",
-    "OOD": "Object-Oriented Design",
-    "APTI": "Aptitude",
-    "COMM": "Communication",
-    "AI": "Artificial Intelligence",
-    "CLOUD": "Cloud Computing",
-    "SQL": "SQL",
-    "SWE": "Software Engineering",
-    "SYSD": "System Design",
-    "NETW": "Networking",
-    "OS": "Operating Systems",
-}
+CATEGORIES = TALENT_CATEGORIES
+CATEGORY_NAMES = TALENT_CATEGORY_NAMES
 
 
 def estimate_candidate_level(skill) -> int | None:
