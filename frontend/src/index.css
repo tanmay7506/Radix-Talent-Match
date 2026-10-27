@@ -3,7 +3,9 @@
 @import './styles/tokens.css';
 
 /* ─── Reset / Base ─────────────────────────────────────────────────────── */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -14,7 +16,7 @@ html {
   font-size: 16px;
   color: var(--text);
   background: var(--bg);
-  color-scheme: dark;
+  color-scheme: light;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -32,7 +34,12 @@ body {
 }
 
 /* ─── Typography Defaults ───────────────────────────────────────────────── */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   color: var(--text-h);
   font-weight: var(--weight-bold);
   line-height: 1.25;
@@ -47,7 +54,10 @@ a {
   text-decoration: none;
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -105,7 +115,7 @@ button, input, select, textarea {
 .neo-btn:hover {
   background: var(--surface-raised);
   border-color: var(--color-secondary);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 14px rgba(7, 32, 63, 0.12);
   transform: translateY(-1px);
 }
 
@@ -120,20 +130,20 @@ button, input, select, textarea {
 }
 
 .neo-btn-accent {
-  background: var(--color-secondary);
-  color: #FFFFFF;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  background: #D9AA90;
+  color: #02000D;
+  border: 1px solid rgba(217, 170, 144, 0.28);
+  box-shadow: 0 4px 16px rgba(7, 32, 63, 0.13);
 }
 
 .neo-btn-accent:hover {
-  background: var(--color-secondary-hover);
-  border-color: rgba(255, 255, 255, 0.28);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  background: #C99173;
+  border-color: rgba(217, 170, 144, 0.34);
+  box-shadow: 0 6px 20px rgba(7, 32, 63, 0.15);
 }
 
 .neo-btn-accent:active {
-  background: var(--color-secondary-active);
+  background: #B77A5E;
   box-shadow: var(--shadow-pressed);
 }
 
@@ -145,9 +155,9 @@ button, input, select, textarea {
 }
 
 .neo-btn-ghost:hover {
-  background: rgba(94, 94, 94, 0.16);
+  background: rgba(217, 170, 144, 0.28);
   border-color: var(--color-secondary);
-  color: #FFFFFF;
+  color: #02000D;
 }
 
 /* ─── Scrollbars ────────────────────────────────────────────────────────── */
@@ -182,9 +192,17 @@ button, input, select, textarea {
   border-width: 0;
 }
 
-.text-accent  { color: #EDEDED; }
-.text-muted   { color: var(--text-muted); }
-.text-plum    { color: var(--text-h); }
+.text-accent {
+  color: #02000D;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-plum {
+  color: var(--text-h);
+}
 
 .tag-list {
   display: flex;
@@ -193,12 +211,12 @@ button, input, select, textarea {
 }
 
 .tag {
-  font-size: var(--text-xs);
+  fmnt-size: var(--text-xs);
   font-weight: var(--weight-medium);
   padding: 5px 12px;
   border-radius: var(--radius-full);
-  background: rgba(94, 94, 94, 0.16);
-  color: #EDEDED;
+  background: rgba(217, 170, 144, 0.28);
+  color: #02000D;
   border: 1px solid var(--border);
   transition: border-color var(--transition-fast);
 }
@@ -222,7 +240,10 @@ button, input, select, textarea {
 
 /* Reduced motion accessibility */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

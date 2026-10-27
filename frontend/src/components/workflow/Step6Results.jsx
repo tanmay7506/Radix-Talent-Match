@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Check,
   X,
@@ -9,8 +10,9 @@ import {
   FileSearch,
   Award,
   Sparkles,
+  Building2,
 } from 'lucide-react'
-import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Callout, Badge } from '../ui'
+import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Callout, Badge, ProgressBar } from '../ui'
 import './Step6Results.css'
 
 export function Step6Results({
@@ -19,7 +21,11 @@ export function Step6Results({
   onStartNew,
   onEditProfile,
   onChangeJd,
+  talentResult = null,
+  stepNumber = 6,
+  stackSkillColumns = false,
 }) {
+  const [activeResultTab, setActiveResultTab] = useState('skill')
   if (!matchResult) return null
 
   const score = typeof matchResult.match_score === 'number' ? Math.round(matchResult.match_score) : 0
@@ -51,7 +57,7 @@ export function Step6Results({
     <div className="wizard-step-container">
       <div className="results-header-banner">
         <div>
-          <h2>Step 6: Role Alignment &amp; Skill Gap Report</h2>
+          <h2>{talentResult ? `Step ${stepNumber}: Combined Match Results` : `Step ${stepNumber}: Role Alignment & Skill Gap Report`}</h2>
           <p>
             Candidate match report for <strong className="candidate-name-highlight">{profile?.name || 'Candidate'}</strong> evaluated against the target job description.
           </p>
@@ -68,7 +74,25 @@ export function Step6Results({
         </div>
       </div>
 
-      <div className="results-grid">
+      {talentResult && (
+        <div className="analysis-tabs" role="tablist" aria-label="Match results">
+            <button id="result-skill-tab" type="button" role="tab" aria-selected={activeResultTab === 'skill'} aria-controls="result-skill-panel" className={activeResultTab === 'skill' ? 'is-active' : ''} onClick={() => setActiveResultTab('skill')}>
+              <Target size={16} /><span>Skill Match</span>
+            </button>
+            <button id="result-talent-tab" type="button" role="tab" aria-selected={activeResultTab === 'talent'} aria-controls="result-talent-panel" className={activeResultTab === 'talent' ? 'is-active' : ''} onClick={() => setActiveResultTab('talent')}>
+              <Building2 size={16} /><span>Talent Check</span>
+            </button>
+        </div>
+      )}
+
+      <div
+        className="results-grid"
+        role={talentResult ? 'tabpanel' : undefined}
+        id={talentResult ? `result-${activeResultTab}-panel` : undefined}
+        aria-labelledby={talentResult ? `result-${activeResultTab}-tab` : undefined}
+      >
+        {(!talentResult || activeResultTab === 'skill') && (
+          <>
         {/* Score Dial & Overview Card */}
         <Card padding="lg" className="score-overview-card">
           <div className="score-dial-wrap">
@@ -130,7 +154,7 @@ export function Step6Results({
         )}
 
         {/* Matched Skills vs Missing Skills Columns */}
-        <div className="matched-vs-missing-grid">
+        <div className={`matched-vs-missing-grid${stackSkillColumns ? ' stacked' : ''}`}>
           {/* Matched Skills */}
           <Card padding="md">
             <CardHeader>
@@ -236,6 +260,12 @@ export function Step6Results({
             </CardContent>
           </Card>
         )}
+          </>
+        )}
+
+        {talentResult && activeResultTab === 'talent' && (
+          <TalentCheckResults talentResult={talentResult} />
+        )}
 
         {/* Navigation & Reset Controls */}
         <div className="results-navigation-footer">
@@ -268,5 +298,74 @@ export function Step6Results({
         </div>
       </div>
     </div>
+  )
+}
+
+function TalentCheckResults({ talentResult }) {
+  const assessment = talentResult.assessment || talentResult
+  const company = talentResult.company?.name || assessment.company || 'Selected company'
+  const categories = assessment.skillset_gap || []
+  const readiness = assessment.readiness_score
+
+  return (
+    <>
+      <Card padding="lg" className="score-overview-card">
+        <CardHeader>
+          <div className="skills-col-header">
+            <div className="icon-badge rec-badge"><Building2 size={17} /></div>
+            <div>
+              <CardTitle as="h3">Talent Check · {company}</CardTitle>
+              <CardDescription>{assessment.role ? `Assessment for ${assessment.role}` : 'Candidate skill levels compared with company requirements.'}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ProgressBar
+            value={readiness ?? 0}
+            max={100}
+            label="Readiness score"
+            valueLabel={readiness == null ? 'Not assessed' : `${Math.round(readiness)}%`}
+          />
+          <ProgressBar
+            value={assessment.coverage_percentage || 0}
+            max={100}
+            label="Assessment coverage"
+            valueLabel={`${Math.round(assessment.coverage_percentage || 0)}%`}
+          />
+          <div className="matched-counter-badges">
+            <span className="count-badge matched-count">{assessment.skills_meeting_requirement || 0} Meets requirement</span>
+            <span className="count-badge missing-count">{assessment.skills_below_requirement || 0} Below requirement</span>
+            <Badge variant="subtle">{assessment.skills_not_assessed || 0} Not assessed</Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card padding="md">
+        <CardHeader>
+          <CardTitle as="h3">Category assessment ({assessment.assessed_categories || 0}/{assessment.total_categories || categories.length})</CardTitle>
+          <CardDescription>Candidate evidence and skill levels for each RADIX category.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="matched-skills-list">
+            {categories.map((item) => {
+              const status = item.meets_requirement === true ? 'success' : item.meets_requirement === false ? 'error' : 'subtle'
+              const statusText = item.meets_requirement === true ? 'Meets requirement' : item.meets_requirement === false ? 'Below requirement' : 'Not assessed'
+              return (
+                <div key={item.category_code} className="matched-skill-item">
+                  <div className="matched-skill-top">
+                    <div className="matched-name-group"><strong className="matched-skill-name">{item.category_name}</strong><span className="match-type-pill">{item.category_code}</span></div>
+                    <Badge variant={status} size="sm">{statusText}</Badge>
+                  </div>
+                  <p className="candidate-evidence-text">
+                    Candidate level: {item.candidate_level ?? 'Not assessed'} · Required level: {item.required_level}/10
+                  </p>
+                  {item.evidence?.length > 0 && <p className="candidate-evidence-text">{item.evidence.join(' · ')}</p>}
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </>
   )
 }

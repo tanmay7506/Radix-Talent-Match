@@ -9,11 +9,11 @@
   width: 52px;
   height: 52px;
   border-radius: var(--radius-full);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(217, 170, 144, 0.28);
   cursor: pointer;
-  background: var(--color-secondary);
-  color: #FFFFFF;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  background: #D9AA90;
+  color: #02000D;
+  box-shadow: 0 6px 24px rgba(7, 32, 63, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -23,8 +23,8 @@
 
 .chatbot-toggle:hover {
   transform: scale(1.08);
-  background: var(--color-secondary-hover);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+  background: #C99173;
+  box-shadow: 0 8px 30px rgba(7, 32, 63, 0.15);
 }
 
 .chatbot-toggle:focus-visible {
@@ -44,7 +44,7 @@
   width: 10px;
   height: 10px;
   border-radius: var(--radius-full);
-  background: #EDEDED;
+  background: #02000D;
   border: 2px solid var(--color-primary);
 }
 
@@ -89,12 +89,12 @@
   width: 32px;
   height: 32px;
   border-radius: var(--radius-full);
-  background: rgba(94, 94, 94, 0.22);
+  background: rgba(217, 170, 144, 0.34);
   border: 1px solid var(--color-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #FFFFFF;
+  color: #02000D;
   flex-shrink: 0;
 }
 
@@ -122,7 +122,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--radius-full);
-  background: var(--color-secondary);
+  background: #D9AA90;
 }
 
 .chatbot-close-btn {
@@ -139,7 +139,7 @@
 }
 
 .chatbot-close-btn:hover {
-  color: #FFFFFF;
+  color: var(--color-secondary);
 }
 
 /* ─── Messages ──────────────────────────────────────────────────────────── */
@@ -176,14 +176,14 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: rgba(94, 94, 94, 0.18);
+  background: rgba(217, 170, 144, 0.30);
   border: 1px solid var(--border);
-  color: #EDEDED;
+  color: #02000D;
 }
 
 .chatbot-msg.user .chatbot-msg-avatar {
-  background: var(--color-secondary);
-  color: #FFFFFF;
+  background: #D9AA90;
+  color: #02000D;
 }
 
 .chatbot-msg-bubble {
@@ -203,7 +203,7 @@
 
 .chatbot-msg.user .chatbot-msg-bubble {
   background: var(--color-secondary);
-  color: #FFFFFF;
+  color: #02000D;
   border-bottom-right-radius: 2px;
 }
 
@@ -269,8 +269,8 @@
   height: 34px;
   border-radius: var(--radius-sm);
   background: var(--color-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #FFFFFF;
+  border: 1px solid rgba(217, 170, 144, 0.28);
+  color: #02000D;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -127,9 +127,9 @@ function SkillCard({ skill }) {
 }
 
 function ConfidencePip({ level }) {
-  const colors = { High: '#EDEDED', Medium: '#5e5e5e', Low: '#707070' }
+  const colors = { High: '#A65E46', Medium: '#A65E46', Low: '#07203F' }
   return (
-    <span className="confidence-pip" style={{ '--pip-color': colors[level] || '#5e5e5e' }}>
+    <span className="confidence-pip" style={{ '--pip-color': colors[level] || '#A65E46' }}>
       <span className="pip-dot" />
       {level}
     </span>

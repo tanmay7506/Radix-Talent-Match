@@ -18,6 +18,13 @@ export default function Header({ currentPage, user, onLogout }) {
   const titleRef  = useRef(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerPage, setDrawerPage] = useState(currentPage)
+  const [isScrolled, setIsScrolled] = useState(false)
+  useEffect(() => {
+    const updateScrollState = () => setIsScrolled(window.scrollY > 8)
+    updateScrollState()
+    window.addEventListener('scroll', updateScrollState, { passive: true })
+    return () => window.removeEventListener('scroll', updateScrollState)
+  }, [])
   useEffect(() => {
     const closeOnEscape = (event) => { if (event.key === 'Escape') setDrawerOpen(false) }
     window.addEventListener('keydown', closeOnEscape)
@@ -49,18 +56,18 @@ export default function Header({ currentPage, user, onLogout }) {
 
   return (
     <>
-      <header className="header">
+      <header className={`header${isScrolled ? ' is-scrolled' : ''}`}>
         {/* Brand */}
         <Link className="header-brand" to="/" aria-label="Go to home" onClick={() => setDrawerOpen(false)}>
           <div className="header-logo" ref={logoRef}>
             <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
-              <rect width="36" height="36" rx="10" fill="url(#radixGrad)" stroke="rgba(94,94,94,0.4)" strokeWidth="1" />
-              <path d="M11 26 L18 12 L25 26" stroke="#EDEDED" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-              <circle cx="18" cy="10" r="2.4" fill="#5e5e5e"/>
+              <rect width="36" height="36" rx="10" fill="url(#radixGrad)" stroke="rgba(7,32,63,0.4)" strokeWidth="1" />
+              <path d="M11 26 L18 12 L25 26" stroke="#02000D" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <circle cx="18" cy="10" r="2.4" fill="#A65E46"/>
               <defs>
                 <linearGradient id="radixGrad" x1="0" y1="0" x2="36" y2="36">
-                  <stop stopColor="#1a1a1c"/>
-                  <stop offset="1" stopColor="#5e5e5e"/>
+                  <stop stopColor="#EBDED4"/>
+                  <stop offset="1" stopColor="#A65E46"/>
                 </linearGradient>
               </defs>
             </svg>

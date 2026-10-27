@@ -9,6 +9,7 @@ import { Step2ProfileReview } from './Step2ProfileReview'
 import { Step3JobDescription } from './Step3JobDescription'
 import { Step4JdReview } from './Step4JdReview'
 import { Step5SkillMatching } from './Step5SkillMatching'
+import { Step6TalentCheck } from './Step6TalentCheck'
 import { Step6Results } from './Step6Results'
 import './MatchWizard.css'
 
@@ -42,8 +43,9 @@ export function MatchWizard({
   // ── Step 4 State: JD Extraction ─────────────────────────────────────────
   const [jdData, setJdData] = useState(initialJdData)
 
-  // ── Step 5 & 6 State: Skill Matching & Results ──────────────────────────
+  // ── Step 5–7 State: Skill Matching, Talent Check & Results ──────────────
   const [matchResult, setMatchResult] = useState(null)
+  const [talentResult, setTalentResult] = useState(null)
   const [isMatching, setIsMatching] = useState(false)
   const [matchingError, setMatchingError] = useState(null)
   const [profilePersistenceWarning, setProfilePersistenceWarning] = useState('')
@@ -55,7 +57,7 @@ export function MatchWizard({
     if (!initialProfile) return
     const profile = JSON.parse(JSON.stringify(initialProfile))
     setOriginalProfile(profile); setEditedProfile(profile); setIsProfileEdited(false)
-    setMatchResult(null); setMaxStepReached((prev) => Math.max(prev, 2)); goToStep(2)
+    setMatchResult(null); setTalentResult(null); setMaxStepReached((prev) => Math.max(prev, 2)); goToStep(2)
   }
 
   // ── Navigation between steps ────────────────────────────────────────────
@@ -83,6 +85,7 @@ export function MatchWizard({
 
       // Invalidate downstream match results because candidate input changed
       setMatchResult(null)
+      setTalentResult(null)
 
       if (onProfileSynced) onProfileSynced(data)
 
@@ -104,6 +107,7 @@ export function MatchWizard({
       setEditedProfile(null)
       setIsProfileEdited(false)
       setMatchResult(null)
+      setTalentResult(null)
       setMaxStepReached(1)
     }
   }
@@ -114,6 +118,7 @@ export function MatchWizard({
     setIsProfileEdited(true)
     // Invalidate downstream match since profile requirements changed
     setMatchResult(null)
+    setTalentResult(null)
     if (onProfileSynced) onProfileSynced(updatedProfile)
   }
 
@@ -139,6 +144,7 @@ export function MatchWizard({
       setEditedProfile(JSON.parse(JSON.stringify(originalProfile)))
       setIsProfileEdited(false)
       setMatchResult(null)
+      setTalentResult(null)
       if (onProfileSynced) onProfileSynced(originalProfile)
     }
   }
@@ -151,6 +157,7 @@ export function MatchWizard({
     // Invalidate downstream analysis and match when input changes
     setJdData(null)
     setMatchResult(null)
+    setTalentResult(null)
   }
 
   const handleJdSubmit = async ({ mode, text, file }) => {
@@ -171,6 +178,7 @@ export function MatchWizard({
 
       setJdData(data)
       setMatchResult(null) // Invalidate match since JD changed
+      setTalentResult(null)
       if (onJdSynced) onJdSynced(data)
 
       setMaxStepReached((prev) => Math.max(prev, 4))
@@ -190,6 +198,7 @@ export function MatchWizard({
     if (!candidateProfile || !jdData || isMatching) return
 
     setMatchingError(null)
+    setTalentResult(null)
     setIsMatching(true)
     const controller = new AbortController()
     controllersRef.current.match?.abort()
@@ -216,7 +225,7 @@ export function MatchWizard({
         }).catch(() => {})
       }
       setMaxStepReached((prev) => Math.max(prev, 6))
-      // Automatic smooth progression to results view
+      // Continue to the company talent-check step after skill matching.
       goToStep(6)
     } catch (err) {
       if (err.name !== 'AbortError') setMatchingError(err.message || 'Failed to calculate role alignment.')
@@ -226,7 +235,7 @@ export function MatchWizard({
     }
   }
 
-  // ── Step 6: Start New Analysis ──────────────────────────────────────────
+  // ── Step 7: Start New Analysis ──────────────────────────────────────────
   const handleStartNewAnalysis = () => {
     setResumeFile(null)
     setOriginalProfile(null)
@@ -236,6 +245,7 @@ export function MatchWizard({
     setJdFile(null)
     setJdData(null)
     setMatchResult(null)
+    setTalentResult(null)
     setResumeError(null)
     setJdError(null)
     setMatchingError(null)
@@ -328,9 +338,25 @@ export function MatchWizard({
         )}
 
         {currentStep === 6 && matchResult && (
+          <Step6TalentCheck
+            profile={editedProfile || originalProfile}
+            jdData={jdData}
+            onBack={() => goToStep(5)}
+            onComplete={(result) => {
+              setTalentResult(result)
+              setMaxStepReached((prev) => Math.max(prev, 7))
+              goToStep(7)
+            }}
+          />
+        )}
+
+        {currentStep === 7 && matchResult && talentResult && (
           <Step6Results
             matchResult={matchResult}
             profile={editedProfile || originalProfile}
+            talentResult={talentResult}
+            stepNumber={7}
+            stackSkillColumns
             onStartNew={handleStartNewAnalysis}
             onEditProfile={() => goToStep(2)}
             onChangeJd={() => goToStep(3)}

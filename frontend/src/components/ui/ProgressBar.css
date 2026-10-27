@@ -27,7 +27,7 @@
 
 .ui-progress-track {
   width: 100%;
-  background: rgba(94, 94, 94, 0.16);
+  background: rgba(217, 170, 144, 0.28);
   border-radius: var(--radius-full);
   overflow: hidden;
   border: 1px solid var(--border-subtle);
@@ -52,7 +52,7 @@
 }
 
 .ui-progress-fill-accent {
-  background: linear-gradient(90deg, var(--color-secondary), #9E9E9E);
+  background: linear-gradient(90deg, var(--color-secondary), #604D46);
 }
 
 .ui-progress-fill-success {

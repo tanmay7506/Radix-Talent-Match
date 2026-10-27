@@ -38,12 +38,12 @@
 }
 
 .jd-tab-btn:hover {
-  color: #FFFFFF;
+  color: var(--color-secondary);
 }
 
 .jd-tab-btn.active {
   background: var(--surface-raised);
-  color: #FFFFFF;
+  color: #02000D;
   box-shadow: var(--shadow-sm);
 }
 
@@ -128,7 +128,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background: rgba(94, 94, 94, 0.08);
+  background: rgba(217, 170, 144, 0.16);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   font-size: var(--text-xs);
