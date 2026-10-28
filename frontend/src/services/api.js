@@ -5,16 +5,39 @@ import { notifySessionExpired } from './sessionEvents'
  * Centralized API service for RADIX Talent Match backend communication.
  *
  * Configurable via VITE_API_URL.
- * In a multi-service Vercel deployment, public rewrites route /api/(.*) to the backend service,
- * so API requests default to relative path '/api'.
+ * In a multi-service Vercel deployment, public rewrites route /api/(.*) to the backend service.
+ * When running in a deployed browser environment (like Vercel), it safely uses relative '/api'
+ * so that API calls are never blocked trying to reach localhost.
  */
 
-const API_BASE_URL = import.meta.env?.VITE_API_URL || '/api'
+function getApiBaseUrl() {
+  const envUrl = (import.meta.env?.VITE_API_URL || '').trim()
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const isLocalhost =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '0.0.0.0'
+
+    // When running in a deployed browser (e.g. *.vercel.app), ignore any localhost target
+    if (!isLocalhost && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1') || envUrl.includes(':8000') || !envUrl)) {
+      return '/api'
+    }
+  }
+
+  // In production builds, default to /api unless an explicit external HTTPS URL is provided
+  if (import.meta.env.PROD && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1') || !envUrl)) {
+    return '/api'
+  }
+
+  return envUrl || '/api'
+}
+
 const FILE_UPLOAD_TIMEOUT_MS = 90_000
 const FILE_UPLOAD_TIMEOUT_MESSAGE = 'LLM free tier failed'
 
 function resolveUrl(endpoint) {
-  const base = (API_BASE_URL || '/api').replace(/\/$/, '')
+  const base = getApiBaseUrl().replace(/\/$/, '')
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
   if (base.endsWith('/api') && path.startsWith('/api/')) {
     return `${base}${path.slice(4)}`
@@ -62,7 +85,7 @@ async function postFormData(endpoint, formData, signal) {
   } catch (err) {
     if (timedOut) throw new Error(FILE_UPLOAD_TIMEOUT_MESSAGE)
     if (err.name === 'TypeError' && err.message.includes('fetch')) {
-      throw new Error(`Unable to connect to RADIX backend at ${API_BASE_URL}. Ensure the backend server is running.`)
+      throw new Error(`Unable to connect to RADIX backend at ${url}. Ensure the backend service is running.`)
     }
     throw err
   } finally {
@@ -102,7 +125,7 @@ async function postJson(endpoint, data, signal) {
     return await res.json()
   } catch (err) {
     if (err.name === 'TypeError' && err.message.includes('fetch')) {
-      throw new Error(`Unable to connect to RADIX backend at ${url}. Ensure the backend server is running.`)
+      throw new Error(`Unable to connect to RADIX backend at ${url}. Ensure the backend service is running.`)
     }
     throw err
   }
@@ -130,14 +153,16 @@ async function getJson(endpoint, signal) {
     return await res.json()
   } catch (err) {
     if (err.name === 'TypeError' && err.message.includes('fetch')) {
-      throw new Error(`Unable to connect to RADIX backend at ${API_BASE_URL}. Ensure the backend server is running.`)
+      throw new Error(`Unable to connect to RADIX backend at ${url}. Ensure the backend service is running.`)
     }
     throw err
   }
 }
 
 export const api = {
-  baseUrl: API_BASE_URL,
+  get baseUrl() {
+    return getApiBaseUrl()
+  },
 
   /**
    * Upload resume and extract structured candidate profile.

@@ -47,6 +47,7 @@ api_router.include_router(jd_analytics_router)
 api_router.include_router(skill_matching_router)
 api_router.include_router(talent_check_router)
 api_router.include_router(company_matching_router)
+api_router.include_router(chat_router)
 app.include_router(api_router)
 
 
