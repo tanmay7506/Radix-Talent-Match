@@ -91,11 +91,11 @@ export function LoginPage() {
         </button>
         {error && <p className="route-error" role="alert">{error}</p>}
         <Button type="submit" variant="primary" fullWidth isLoading={busy}>Log in</Button>
-        {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' && (
+        {(import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV) && (
           <Button type="button" variant="ghost" fullWidth disabled={busy} onClick={useDebugLogin}>Use dummy debug login</Button>
         )}
         <p className="route-switch">New to RADIX? <Link to="/signup">Create an account</Link></p>
-        {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' && (
+        {(import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV) && (
           <p className="route-note">Development mock sign-in is enabled. This is not secure authentication.</p>
         )}
       </form>
@@ -211,7 +211,7 @@ export function SignupPage() {
           {busy && mode === 'resume' ? 'Creating account & processing resume…' : 'Create account'}
         </Button>
         <p className="route-switch">Already have an account? <Link to="/login">Log in</Link></p>
-        {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' && (
+        {(import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV) && (
           <p className="route-note">Development mock account only. This is not secure authentication.</p>
         )}
       </form>

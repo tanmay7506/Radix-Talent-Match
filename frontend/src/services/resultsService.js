@@ -3,7 +3,7 @@ import { notifySessionExpired } from './sessionEvents'
 
 // Provisional result schema: id, created_at, job_title/company/score are optional.
 const devResults = []
-const mockEnabled = () => import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true'
+const mockEnabled = () => import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV
 
 export const resultsService = {
   /** @returns {Promise<import('./contracts').SavedMatchResult[]>} */
