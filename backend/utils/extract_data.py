@@ -14,35 +14,38 @@ MODEL_EXECUTOR = ThreadPoolExecutor(
 
 
 class Skill(BaseModel):
-    skill_name: SkillName
-    skill_code: SkillCode
-    skill_level: int = Field(ge=1, le=10)
-    evidence: list[str]
-    confidence: Literal["High", "Medium", "Low"]
+    # Resume extraction emits the 12 category labels, while the manual-profile
+    # UI can contain a named technology such as Python. Keep both valid at the
+    # API boundary; matching still requires explicit evidence.
+    skill_name: str
+    skill_code: SkillCode = "OTH"
+    skill_level: int = Field(default=1, ge=1, le=10)
+    evidence: list[str] = Field(default_factory=list)
+    confidence: Literal["High", "Medium", "Low"] = "Medium"
 
 
 class Education(BaseModel):
-    degree: str
-    college: str
-    graducation_year: str
-    cgpa: float = Field(gt=1, le=10)
+    degree: str = ""
+    college: str = ""
+    graducation_year: str = ""
+    cgpa: float | None = Field(default=None, gt=1, le=10)
 
 
 class ProfileResponseModel(BaseModel):
     name: str
     email: str
-    education: Education
-    skills: list[Skill]
-    hackathons: list[str]
-    internships: list[str]
-    certifications: list[str]
-    preferred_roles: list[str]
-    cv_file: str
+    education: Education = Field(default_factory=Education)
+    skills: list[Skill] = Field(default_factory=list)
+    hackathons: list[str] = Field(default_factory=list)
+    internships: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    preferred_roles: list[str] = Field(default_factory=list)
+    cv_file: str = ""
 
 
 def map_skill_metadata(profile: ProfileResponseModel) -> ProfileResponseModel:
     for skill in profile.skills:
-        skill.skill_code = PROFILE_SKILL_CODES[skill.skill_name]
+        skill.skill_code = PROFILE_SKILL_CODES.get(skill.skill_name, skill.skill_code)
     return profile
 
 

@@ -55,9 +55,13 @@ class Skill(BaseModel):
             ),
         }.items():
             if field not in data:
-                data[field] = next(
+                value = next(
                     (normalized_keys[a] for a in aliases if a in normalized_keys), None
                 )
+                # Leave absent optional fields absent so their Pydantic defaults
+                # apply; explicitly injecting None breaks evidence/confidence.
+                if value is not None:
+                    data[field] = value
 
         # Map Role 3's skill level to Role 4's level
         if "level" not in data:
@@ -87,8 +91,10 @@ class Skill(BaseModel):
 
         if isinstance(category, str):
             data["category_code"] = normalize_category(category)
-            if data["category_code"] is None:
-                data["category_code"] = normalize_category(data.get("skill_name"))
+            if data["category_code"] in (None, "OTHER"):
+                inferred = normalize_category(data.get("skill_name"))
+                if inferred:
+                    data["category_code"] = inferred
 
         return data
 
@@ -179,16 +185,20 @@ class TalentCheckRequest(BaseModel):
     company: str | None = Field(default=None, min_length=1)
     company_id: int | None = None
     profile: CandidateProfile
+    jd_skills: dict[str, Any] | None = None
+    jd_title: str | None = None
 
     @model_validator(mode="before")
     @classmethod
     def extract_profile(cls, data):
         if not isinstance(data, dict) or "profile" in data:
             return data
-        request_fields = {"company", "company_id", "role"}
+        request_fields = {"company", "company_id", "role", "jd_skills", "jd_title"}
         return {
             "company": data.get("company"),
             "company_id": data.get("company_id"),
+            "jd_skills": data.get("jd_skills"),
+            "jd_title": data.get("jd_title"),
             "profile": {
                 key: value for key, value in data.items() if key not in request_fields
             },

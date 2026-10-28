@@ -301,6 +301,7 @@ def _deterministic_improvements(assessment):
         improvements.append(
             {
                 "category": row["category"],
+                "category_code": row.get("category_code") or "",
                 "current_level": current,
                 "required_level": required,
                 "gap": gap,
@@ -726,37 +727,450 @@ def _category_guidance(category):
     )
 
 
-def _fallback_roadmap(improvements, rows):
-    """Build a roadmap from confirmed gaps first; unknowns are a separate track."""
-    focus_categories = []
-    for item in improvements:
-        if item["category"] not in focus_categories:
-            focus_categories.append(item["category"])
+def _jd_terms_for_category(category_code: str, category_name: str, jd_skills: dict | None) -> list[str]:
+    """Extract specific skills and technologies mentioned in the uploaded JD for this category."""
+    if not jd_skills or not isinstance(jd_skills, dict):
+        return []
+    terms = []
+    from functions.talent_check.schemas import normalize_category
+
+    radix_categories = jd_skills.get("radix_categories") or {}
+    technologies = jd_skills.get("technologies") or []
+
+    for cat_key, items in radix_categories.items():
+        if not isinstance(items, list):
+            continue
+        mapped_code = normalize_category(cat_key)
+        if mapped_code == category_code or normalize_category(category_name) == mapped_code:
+            terms.extend([str(item).strip() for item in items if str(item).strip()])
+
+    for tech in technologies:
+        if isinstance(tech, str) and tech.strip():
+            if normalize_category(tech) == category_code:
+                terms.append(tech.strip())
+
+    return list(dict.fromkeys(terms))
+
+
+def _category_prerequisites(category_code: str, candidate_level: int | None) -> list[dict]:
+    """Identify prerequisites only when genuinely necessary for a relevant gap."""
+    if candidate_level is not None and candidate_level >= 4:
+        return []
+
+    prereq_catalog = {
+        "SQL": {
+            "title": "Relational Data Modeling & Basic CRUD",
+            "reason": "Foundational database schema concepts required before advanced query optimization.",
+            "tasks": [
+                "Review relational tables, primary/foreign key constraints, and normalization (1NF-3NF).",
+                "Practise fundamental SELECT, INSERT, UPDATE, and DELETE operations on sample data.",
+            ],
+            "checkpoint": "Checkpoint — Basic Relational Schema",
+        },
+        "COD": {
+            "title": "Syntax, Control Flow & Modular Functions",
+            "reason": "Core programming mechanics required before production application development.",
+            "tasks": [
+                "Review variables, data types, loops, conditionals, and modular function decomposition.",
+                "Implement structured error handling and clean code conventions.",
+            ],
+            "checkpoint": "Checkpoint — Core Program Flow & Unit Tests",
+        },
+        "DSA": {
+            "title": "Linear Data Structures & Complexity Basics",
+            "reason": "Arrays, hash maps, and complexity analysis are prerequisites for non-linear structures.",
+            "tasks": [
+                "Implement and manipulate arrays, strings, hash maps, and hash sets.",
+                "Analyse Time and Space complexity (Big-O) for search and sort operations.",
+            ],
+            "checkpoint": "Checkpoint — Linear Structure Implementations",
+        },
+        "SYSD": {
+            "title": "Client-Server Architecture & HTTP Basics",
+            "reason": "Understanding network protocols and APIs is essential before distributed system design.",
+            "tasks": [
+                "Review client-server request-response lifecycle and HTTP status codes.",
+                "Understand synchronous vs asynchronous communication patterns.",
+            ],
+            "checkpoint": "Checkpoint — RESTful Communication Baseline",
+        },
+        "SWE": {
+            "title": "Git Version Control & Basic Unit Testing",
+            "reason": "Clean versioning and test-driven habits are required before CI/CD pipelines.",
+            "tasks": [
+                "Practise Git branch workflows, pull requests, and commit standards.",
+                "Write basic unit tests asserting input/output boundaries.",
+            ],
+            "checkpoint": "Checkpoint — Git Workflow & Test Suite",
+        },
+        "CLOUD": {
+            "title": "CLI Navigation & Container Basics",
+            "reason": "Command-line competence and containers are required before deploying cloud services.",
+            "tasks": [
+                "Review shell commands, environment variables, and process management.",
+                "Create a simple Dockerfile and run a containerized application.",
+            ],
+            "checkpoint": "Checkpoint — Local Container Execution",
+        },
+        "OOD": {
+            "title": "Classes, Objects & Encapsulation Basics",
+            "reason": "Object orientation fundamentals precede design patterns and SOLID principles.",
+            "tasks": [
+                "Model simple real-world entities with classes, attributes, and methods.",
+                "Practise encapsulation, inheritance, and interface contracts.",
+            ],
+            "checkpoint": "Checkpoint — Domain Model with Unit Tests",
+        },
+        "AI": {
+            "title": "API Integration & Structured JSON Handling",
+            "reason": "Working with model endpoints and validating schemas precedes complex AI architectures.",
+            "tasks": [
+                "Connect to an AI API endpoint and pass structured parameters.",
+                "Validate model response JSON schemas with strict validation.",
+            ],
+            "checkpoint": "Checkpoint — Structured API Pipeline",
+        },
+        "OS": {
+            "title": "Process, Memory & File System Fundamentals",
+            "reason": "Operating system basics are required before tackling multithreading and synchronization.",
+            "tasks": [
+                "Review process states, memory allocation, and file descriptors.",
+                "Inspect running processes and resource usage via system utilities.",
+            ],
+            "checkpoint": "Checkpoint — Process Inspection & Trace",
+        },
+        "NETW": {
+            "title": "TCP/IP, DNS & Port Fundamentals",
+            "reason": "Transport and naming basics are required before advanced network diagnostics.",
+            "tasks": [
+                "Review IP addressing, DNS resolution, and TCP handshake steps.",
+                "Inspect local network ports and active socket connections.",
+            ],
+            "checkpoint": "Checkpoint — Socket Connection Trace",
+        },
+        "COMM": {
+            "title": "Technical Documentation Foundations",
+            "reason": "Clear written structure is essential before presenting complex system designs.",
+            "tasks": [
+                "Draft structured markdown documentation explaining a technical feature.",
+                "Define user expectations, setup instructions, and known boundaries.",
+            ],
+            "checkpoint": "Checkpoint — Documentation Review",
+        },
+        "APTI": {
+            "title": "Quantitative & Logical Diagnostic Baseline",
+            "reason": "A baseline diagnostic isolates specific problem types needing focused remediation.",
+            "tasks": [
+                "Complete a foundational problem set covering arithmetic and logical deduction.",
+                "Identify specific problem patterns causing incorrect answers.",
+            ],
+            "checkpoint": "Checkpoint — Diagnostic Gap Inventory",
+        },
+    }
+
+    entry = prereq_catalog.get(category_code)
+    if not entry:
+        return []
+
+    return [{
+        "id": f"prereq-{category_code.lower()}",
+        "title": entry["title"],
+        "category_code": category_code,
+        "node_type": "prerequisite",
+        "why_it_matters": entry["reason"],
+        "tasks": entry["tasks"],
+        "checkpoint": entry["checkpoint"],
+    }]
+
+
+def _build_jd_roadmap_graph(improvements, rows, jd_context: dict | None = None) -> dict:
+    from functions.talent_check.schemas import normalize_category
+
+    jd_context = jd_context or {}
+    jd_skills = jd_context.get("jd_skills") or {}
+    jd_title = jd_context.get("jd_title") or "Target Role"
 
     unassessed = sorted(
         {row["category"] for row in rows if row["candidate_level"] is None}
     )
 
-    roadmap = []
-    for index, category in enumerate(focus_categories[:4]):
-        focus, tasks, milestone = _category_guidance(category)
-        roadmap.append(
+    if not improvements:
+        return {
+            "target_role": jd_title,
+            "total_gaps": 0,
+            "has_gaps": False,
+            "summary": f"All evaluated skills meet or exceed configured requirements for {jd_title}.",
+            "stages": [
+                {
+                    "id": "stage-verified",
+                    "name": "Phase 1: Role Alignment Verified",
+                    "description": f"Candidate demonstrates required proficiency across all evaluated categories for {jd_title}.",
+                    "tracks": [
+                        {
+                            "track_id": "verified-track",
+                            "track_name": "Readiness & Verification Track",
+                            "nodes": [
+                                {
+                                    "id": "node-verified",
+                                    "title": "All Evaluated Skills Meet Requirements",
+                                    "category": "Role Alignment",
+                                    "category_code": "MATCH",
+                                    "node_type": "milestone",
+                                    "status": "completed",
+                                    "why_it_matters": f"Assessed levels meet or exceed the requirements for {jd_title}.",
+                                    "tasks": [
+                                        "Prepare structured technical walkthroughs for projects demonstrating these skills.",
+                                        "Review system architecture decisions and trade-offs to articulate in technical interviews.",
+                                    ],
+                                    "checkpoint": "Checkpoint — Technical Portfolio & Interview Readiness",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "connections": [],
+            "unassessed_skills": [
+                {"category": cat, "reason": "Not assessed from profile evidence. Not a confirmed gap."}
+                for cat in unassessed
+            ],
+        }
+
+    # Group confirmed gaps by broad tracks for parallel branching
+    engineering_codes = {"COD", "SWE", "OOD", "DSA"}
+    data_systems_codes = {"SQL", "SYSD", "CLOUD", "AI", "OS", "NETW"}
+    diagnostic_codes = {"APTI", "COMM"}
+
+    prereq_nodes = []
+    track_engineering = []
+    track_data_systems = []
+    track_diagnostic = []
+    connections = []
+
+    seen_categories = set()
+
+    for item in improvements:
+        cat_name = item["category"]
+        if cat_name in seen_categories:
+            continue
+        seen_categories.add(cat_name)
+
+        code = item.get("category_code") or normalize_category(cat_name) or "OTH"
+        current = item["current_level"]
+        required = item["required_level"]
+        gap = item["gap"]
+
+        jd_terms = _jd_terms_for_category(code, cat_name, jd_skills)
+        if jd_terms:
+            focus_title = f"{cat_name} ({', '.join(jd_terms[:2])})"
+            why_matters = f"Explicitly required in the uploaded JD ({', '.join(jd_terms[:3])}). Current level {current} vs required level {required} (gap of {gap} levels)."
+        else:
+            focus_title = cat_name
+            why_matters = f"Required by role expectations at Level {required}; assessed at Level {current} (gap of {gap} levels)."
+
+        _, default_tasks, default_milestone = _category_guidance(code)
+
+        # Check for prerequisites (only added when candidate level <= 3)
+        prereqs = _category_prerequisites(code, current)
+        prereq_ids = []
+        for p in prereqs:
+            prereq_nodes.append(p)
+            prereq_ids.append(p["id"])
+
+        gap_node_id = f"gap-{code.lower()}"
+        checkpoint_node_id = f"checkpoint-{code.lower()}"
+
+        gap_node = {
+            "id": gap_node_id,
+            "title": focus_title,
+            "category": cat_name,
+            "category_code": code,
+            "node_type": "gap_skill",
+            "current_level": current,
+            "target_level": required,
+            "gap": gap,
+            "jd_terms": jd_terms,
+            "why_it_matters": why_matters,
+            "tasks": default_tasks,
+            "prerequisites": [p["title"] for p in prereqs],
+            "checkpoint": default_milestone,
+        }
+
+        checkpoint_node = {
+            "id": checkpoint_node_id,
+            "title": f"Checkpoint — {cat_name} Demonstration",
+            "category": cat_name,
+            "category_code": code,
+            "node_type": "checkpoint",
+            "tasks": [default_milestone],
+            "why_it_matters": f"Verifies practical attainment of {cat_name} to meet {jd_title} standards.",
+        }
+
+        # Connections
+        for pid in prereq_ids:
+            connections.append({"from": pid, "to": gap_node_id, "type": "prerequisite"})
+        connections.append({"from": gap_node_id, "to": checkpoint_node_id, "type": "checkpoint"})
+
+        # Assign to parallel tracks
+        if code in engineering_codes:
+            track_engineering.extend([gap_node, checkpoint_node])
+        elif code in diagnostic_codes:
+            track_diagnostic.extend([gap_node, checkpoint_node])
+        else:
+            track_data_systems.extend([gap_node, checkpoint_node])
+
+    stages = []
+
+    # Stage 1: Prerequisites (if any)
+    if prereq_nodes:
+        stages.append({
+            "id": "stage-1-prereq",
+            "name": "Phase 1: Foundational Prerequisites",
+            "description": "Essential fundamentals required before diving into advanced role requirements.",
+            "tracks": [
+                {
+                    "track_id": "prereq-track",
+                    "track_name": "Prerequisites Track",
+                    "nodes": prereq_nodes,
+                }
+            ],
+        })
+
+    # Stage 2: Core Skill Gap Remediation (Parallel branches)
+    active_tracks = []
+    if track_engineering:
+        active_tracks.append({
+            "track_id": "track-engineering",
+            "track_name": "Engineering & Architecture Track",
+            "nodes": track_engineering,
+        })
+    if track_data_systems:
+        active_tracks.append({
+            "track_id": "track-data-systems",
+            "track_name": "Data, Systems & Cloud Track",
+            "nodes": track_data_systems,
+        })
+    if track_diagnostic:
+        active_tracks.append({
+            "track_id": "track-diagnostic",
+            "track_name": "Analytical & Professional Track",
+            "nodes": track_diagnostic,
+        })
+
+    stages.append({
+        "id": "stage-2-gaps",
+        "name": "Phase 2: Core Skill Gap Remediation (Parallel Tracks)",
+        "description": "Focused learning paths for confirmed skill gaps. Independent tracks can proceed in parallel.",
+        "parallel": len(active_tracks) > 1,
+        "tracks": active_tracks,
+    })
+
+    # Stage 3: Applied Role Readiness Milestone
+    capstone_node_id = "node-capstone-integration"
+    stages.append({
+        "id": "stage-3-capstone",
+        "name": "Phase 3: Applied Integration & Role Readiness",
+        "description": f"Synthesize improved skills in a practical project meeting {jd_title} role expectations.",
+        "tracks": [
             {
-                "week": f"{index * 2 + 1}-{index * 2 + 2}",
-                "focus": focus,
-                "tasks": tasks,
-                "milestone": milestone,
+                "track_id": "capstone-track",
+                "track_name": "Role Integration Track",
+                "nodes": [
+                    {
+                        "id": capstone_node_id,
+                        "title": f"Applied Capstone: {jd_title} Readiness",
+                        "category": "Role Integration",
+                        "category_code": "INTEGRATION",
+                        "node_type": "milestone",
+                        "why_it_matters": f"Demonstrates end-to-end competence across the skills required by {jd_title}.",
+                        "tasks": [
+                            f"Build a working project that integrates the newly leveled skills from the JD ({', '.join(seen_categories)}).",
+                            "Document code architecture, schema designs, and testing procedures in a public README.",
+                            "Record a short walkthrough explaining trade-offs, architecture choices, and lessons learned.",
+                        ],
+                        "checkpoint": f"Checkpoint — Verified {jd_title} Project Submission",
+                    }
+                ],
             }
-        )
+        ],
+    })
+
+    # Connect all checkpoints to the capstone milestone
+    for track in active_tracks:
+        for node in track["nodes"]:
+            if node["node_type"] == "checkpoint":
+                connections.append({"from": node["id"], "to": capstone_node_id, "type": "merge"})
+
+    return {
+        "target_role": jd_title,
+        "total_gaps": len(seen_categories),
+        "has_gaps": True,
+        "summary": f"Personalized learning roadmap targeting {len(seen_categories)} confirmed skill gaps for {jd_title}.",
+        "stages": stages,
+        "connections": connections,
+        "unassessed_skills": [
+            {"category": cat, "reason": "Not assessed from profile evidence. Not counted as a skill gap."}
+            for cat in unassessed
+        ],
+    }
+
+
+def _fallback_roadmap(improvements, rows, jd_context: dict | None = None):
+    """Build a sequential roadmap from confirmed gaps first; unknowns are a separate track."""
+    from functions.talent_check.schemas import normalize_category
+
+    jd_context = jd_context or {}
+    jd_skills = jd_context.get("jd_skills") or {}
+    jd_title = jd_context.get("jd_title") or "Target Role"
+
+    roadmap = []
+    seen = set()
+    week_start = 1
+
+    for item in improvements:
+        cat_name = item["category"]
+        if cat_name in seen:
+            continue
+        seen.add(cat_name)
+
+        code = item.get("category_code") or normalize_category(cat_name) or "OTH"
+        current = item["current_level"]
+        required = item["required_level"]
+        gap = item["gap"]
+
+        jd_terms = _jd_terms_for_category(code, cat_name, jd_skills)
+        if jd_terms:
+            focus_title = f"{cat_name} ({', '.join(jd_terms[:2])})"
+        else:
+            focus_title = cat_name
+
+        _, default_tasks, default_milestone = _category_guidance(code)
+
+        roadmap.append({
+            "week": f"{week_start}-{week_start + 1}",
+            "focus": focus_title,
+            "tasks": default_tasks,
+            "milestone": default_milestone,
+            "category_code": code,
+            "current_level": current,
+            "target_level": required,
+            "gap": gap,
+            "jd_terms": jd_terms,
+        })
+        week_start += 2
+
+    unassessed = sorted(
+        {row["category"] for row in rows if row["candidate_level"] is None}
+    )
 
     if unassessed and len(roadmap) < MAX_ROADMAP_ITEMS:
         roadmap.append(
             {
-                "week": "Follow-up",
-                "focus": "Assess unassessed categories",
+                "week": "Diagnostic",
+                "focus": "Diagnostic for unassessed categories",
                 "tasks": [
-                    f"Gather evidence or run a separate assessment for {category}."
-                    for category in unassessed[:4]
+                    f"Gather evidence or complete a diagnostic for {category}."
+                    for category in unassessed[:3]
                 ],
                 "milestone": (
                     "Record evidence-based levels for these categories; do not "
@@ -769,13 +1183,12 @@ def _fallback_roadmap(improvements, rows):
         roadmap.append(
             {
                 "week": "1-2",
-                "focus": "Validate and maintain assessed skills",
+                "focus": f"Role Readiness Verification ({jd_title})",
                 "tasks": [
                     "Review the configured company requirements for accuracy.",
                     "Collect recent evidence for the categories already assessed.",
-                    "Assess any relevant categories that remain unknown.",
                 ],
-                "milestone": "Produce an evidence-backed profile with clear coverage.",
+                "milestone": f"All evaluated skills meet or exceed configured requirements for {jd_title}.",
             }
         )
 
@@ -971,7 +1384,7 @@ def _deterministic_details(assessment, summary, improvements, strengths, rows):
     ]
 
 
-def generate_candidate_analysis(assessment: dict) -> dict:
+def generate_candidate_analysis(assessment: dict, jd_context: dict | None = None) -> dict:
     """
     Generate career recommendations while keeping scores, gaps, coverage,
     roadmap priorities, and detailed findings grounded in assessment data.
@@ -984,12 +1397,15 @@ def generate_candidate_analysis(assessment: dict) -> dict:
     improvements = _deterministic_improvements(assessment)
     strengths = _deterministic_strengths(assessment)
     summary = _deterministic_summary(assessment)
+    roadmap_graph = _build_jd_roadmap_graph(improvements, rows, jd_context)
+    learning_roadmap = _fallback_roadmap(improvements, rows, jd_context)
 
     result = {
         "summary": summary,
         "strengths": strengths,
         "improvement_areas": improvements,  # always deterministic
-        "learning_roadmap": _fallback_roadmap(improvements, rows),
+        "learning_roadmap": learning_roadmap,
+        "roadmap_graph": roadmap_graph,
         "recommended_projects": _fallback_projects(improvements, rows),
         "limitations": DEFAULT_LIMITATIONS.copy(),
         "detailed_analysis": _deterministic_details(
@@ -1033,14 +1449,23 @@ def generate_candidate_analysis(assessment: dict) -> dict:
         "Assessment:\n" + data
     )
 
+    jd_desc = ""
+    if jd_context:
+        title = jd_context.get("jd_title") or ""
+        jd_skills_dict = jd_context.get("jd_skills") or {}
+        if title or jd_skills_dict:
+            jd_desc = f"\nTarget Job Description:\nRole: {title}\nJD Skills: {json.dumps(jd_skills_dict, ensure_ascii=False)}\n"
+
     gemini_prompt = (
         "Return valid JSON with keys summary, strengths, learning_roadmap, "
         "recommended_projects, limitations, detailed_analysis. "
+        "Focus the learning_roadmap strictly on the candidate's confirmed below-requirement skill gaps for this specific target role. "
+        "Do not invent unrelated generic skills or technologies. "
         "Never treat null candidate "
         "levels as zero or as weaknesses. Never claim configured demo "
         "requirements are verified hiring criteria. Make any limitations "
         "specific and cautious. Use the required fields and correct types.\n\n"
-        "Assessment:\n" + data
+        f"Assessment:\n{data}\n{jd_desc}"
     )
 
     try:

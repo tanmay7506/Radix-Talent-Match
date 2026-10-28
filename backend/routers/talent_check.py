@@ -105,13 +105,18 @@ def evaluate_talent_check_analyze(
         "company": company_info,
         "requirements": requirements,
         "assessment": assessment_data,
+        "jd_skills": payload.jd_skills,
+        "jd_title": payload.jd_title,
     }
     cached = get_cached("talent-check-analyze", cache_inputs)
     if cached is not None:
         return cached
 
     try:
-        analysis = generate_candidate_analysis(assessment_data)
+        analysis = generate_candidate_analysis(
+            assessment_data,
+            jd_context={"jd_skills": payload.jd_skills, "jd_title": payload.jd_title},
+        )
     except ValueError as error:
         raise HTTPException(status_code=503, detail=str(error))
     except (OpenAIError, RuntimeError) as error:

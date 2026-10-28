@@ -21,8 +21,13 @@ function summarizeResult(item) {
   const metadata = item.metadata || item.job || item.job_metadata || match.metadata || match.job || {}
   const rawScore = item.match_score ?? item.score ?? match.match_score ?? match.overall_score
   const score = typeof rawScore === 'number' ? rawScore : Number.isFinite(Number(rawScore)) ? Number(rawScore) : null
-  const matched = match.matched_skills || match.matchedSkills || []
-  const missing = match.missing_skills || match.missingSkills || match.skill_gaps || []
+  const canonicalSkills = Array.isArray(match.canonical_skills) ? match.canonical_skills : []
+  const matched = canonicalSkills.length > 0
+    ? canonicalSkills.filter((item) => item.status === 'matched')
+    : (match.matched_skills || match.matchedSkills || [])
+  const missing = canonicalSkills.length > 0
+    ? canonicalSkills.filter((item) => item.status === 'not_assessed' || item.status === 'gap')
+    : (match.unassessed_skills || match.missing_skills || match.missingSkills || match.skill_gaps || [])
   const createdAt = item.created_at || item.matched_at || item.saved_at || item.createdAt
   const companyValue = item.company || item.company_name || metadata.company || metadata.company_name || match.company
   const company = typeof companyValue === 'string' ? companyValue : companyValue?.name || companyValue?.title
@@ -171,6 +176,8 @@ export function SavedResultPage() {
     <Step6Results
       matchResult={item.matchResult || item.match_result || item.result || item}
       profile={item.profile || {}}
+      talentResult={item.talentResult || item.talent_result || null}
+      jdData={item.jdData || item.jd_data || item.jd || null}
       stackSkillColumns
       onStartNew={() => navigate({ to: '/match' })}
       onEditProfile={() => navigate({ to: '/profile' })}

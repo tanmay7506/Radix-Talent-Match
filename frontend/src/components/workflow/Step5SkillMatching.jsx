@@ -102,13 +102,17 @@ export function Step5SkillMatching({
                 <div className="stat-pill">
                   <span className="stat-pill-label">Matched Skills Discovered</span>
                   <strong className="stat-pill-val stat-val-matched">
-                    {matchResult.matched_skills?.length || 0}
+                    {matchResult.canonical_skills
+                      ? matchResult.canonical_skills.filter((item) => item.status === 'matched').length
+                      : (matchResult.matched_skills?.length || 0)}
                   </strong>
                 </div>
                 <div className="stat-pill">
-                  <span className="stat-pill-label">Identified Skill Gaps</span>
+                  <span className="stat-pill-label">Not Assessed Skills</span>
                   <strong className="stat-pill-val stat-val-missing">
-                    {matchResult.missing_skills?.length || 0}
+                    {matchResult.canonical_skills
+                      ? matchResult.canonical_skills.filter((item) => item.status === 'not_assessed').length
+                      : (matchResult.unassessed_skills?.length || matchResult.missing_skills?.length || 0)}
                   </strong>
                 </div>
               </div>
