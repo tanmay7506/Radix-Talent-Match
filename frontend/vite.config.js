@@ -3,6 +3,8 @@ import babel from '@rolldown/plugin-babel'
 import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
+const backendTarget = process.env.BACKEND_URL || 'http://localhost:8000'
+
 export default defineConfig({
   plugins: [
     react(),
@@ -10,12 +12,16 @@ export default defineConfig({
   ],
   server: {
     proxy: {
+      '/api': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
       '^/profile/build': {
-        target: 'http://localhost:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/jd': {
-        target: 'http://localhost:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
     },

@@ -4,15 +4,26 @@ import { notifySessionExpired } from './sessionEvents'
 /**
  * Centralized API service for RADIX Talent Match backend communication.
  *
- * Configurable via VITE_API_URL, defaulting to http://localhost:8000.
+ * Configurable via VITE_API_URL.
+ * In a multi-service Vercel deployment, public rewrites route /api/(.*) to the backend service,
+ * so API requests default to relative path '/api'.
  */
 
-const API_BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env?.VITE_API_URL || '/api'
 const FILE_UPLOAD_TIMEOUT_MS = 90_000
 const FILE_UPLOAD_TIMEOUT_MESSAGE = 'LLM free tier failed'
 
+function resolveUrl(endpoint) {
+  const base = (API_BASE_URL || '/api').replace(/\/$/, '')
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  if (base.endsWith('/api') && path.startsWith('/api/')) {
+    return `${base}${path.slice(4)}`
+  }
+  return `${base}${path}`
+}
+
 async function postFormData(endpoint, formData, signal) {
-  const url = `${API_BASE_URL}${endpoint}`
+  const url = resolveUrl(endpoint)
   const requestController = new AbortController()
   let timedOut = false
   const abortRequest = () => requestController.abort()
@@ -61,7 +72,7 @@ async function postFormData(endpoint, formData, signal) {
 }
 
 async function postJson(endpoint, data, signal) {
-  const url = `${API_BASE_URL}${endpoint}`
+  const url = resolveUrl(endpoint)
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -91,14 +102,14 @@ async function postJson(endpoint, data, signal) {
     return await res.json()
   } catch (err) {
     if (err.name === 'TypeError' && err.message.includes('fetch')) {
-      throw new Error(`Unable to connect to RADIX backend at ${API_BASE_URL}. Ensure the backend server is running.`)
+      throw new Error(`Unable to connect to RADIX backend at ${url}. Ensure the backend server is running.`)
     }
     throw err
   }
 }
 
 async function getJson(endpoint, signal) {
-  const url = `${API_BASE_URL}${endpoint}`
+  const url = resolveUrl(endpoint)
   try {
     const res = await fetch(url, { signal })
     if (!res.ok) {
