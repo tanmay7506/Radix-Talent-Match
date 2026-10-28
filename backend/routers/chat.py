@@ -6,7 +6,7 @@ from functions.models import model_genai, model
 
 logger = logging.getLogger("radix.chat")
 
-chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
+chat_router = APIRouter(tags=["chat"])
 
 RADIX_ASSISTANT_SYSTEM_PROMPT = """You are the RADIX Talent Match Assistant, an intelligent career and technical advisor built into the RADIX Talent Match platform.
 
@@ -52,8 +52,10 @@ class ChatResponse(BaseModel):
     reply: str
 
 
-@chat_router.post("", response_model=ChatResponse)
-@chat_router.post("/", response_model=ChatResponse)
+@chat_router.post("/chat", response_model=ChatResponse)
+@chat_router.post("/chat/", response_model=ChatResponse)
+@chat_router.post("/api/chat", response_model=ChatResponse)
+@chat_router.post("/api/chat/", response_model=ChatResponse)
 async def chat_with_agent(payload: ChatRequest):
     user_query = payload.message.strip()
     if not user_query:
