@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
+import { api } from '../../services/api'
 import {
   Check,
   X,
@@ -9,11 +10,11 @@ import {
   RotateCcw,
   Edit,
   FileSearch,
-  Award,
-  Sparkles,
   Building2,
+  Compass,
 } from 'lucide-react'
 import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Callout, Badge, ProgressBar } from '../ui'
+import { SkillGapRoadmap } from './SkillGapRoadmap'
 import './Step6Results.css'
 
 export function Step6Results({
@@ -26,9 +27,23 @@ export function Step6Results({
   talentResult = null,
   stepNumber = 6,
   stackSkillColumns = false,
+  jdData = null,
 }) {
   const [activeResultTab, setActiveResultTab] = useState('skill')
+  const [activeSkillView, setActiveSkillView] = useState('gaps')
+  const [roadmap, setRoadmap] = useState(null)
+  const [roadmapGraph, setRoadmapGraph] = useState(null)
+  const [roadmapError, setRoadmapError] = useState('')
+  const [isLoadingRoadmap, setIsLoadingRoadmap] = useState(false)
   const resultsRef = useRef(null)
+  const roadmapControllerRef = useRef(null)
+
+  // Clear roadmap when candidate profile, JD, or talent assessment changes
+  useEffect(() => {
+    setRoadmap(null)
+    setRoadmapGraph(null)
+    setRoadmapError('')
+  }, [profile, jdData, talentResult])
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
     const context = gsap.context(() => {
@@ -38,19 +53,34 @@ export function Step6Results({
     }, resultsRef)
     return () => context.revert()
   }, [activeResultTab])
+  useEffect(() => () => roadmapControllerRef.current?.abort(), [])
   if (!matchResult) return null
 
   const score = typeof matchResult.match_score === 'number' ? Math.round(matchResult.match_score) : 0
   const confidence = matchResult.match_confidence || 'medium'
-  const matched = matchResult.matched_skills || []
-  const missing = matchResult.missing_skills || []
-  const sortedMissing = missing.map((item, index) => ({ item, index })).sort((a, b) => {
-    const rank = { high: 0, medium: 1, low: 2 }
-    const priority = (item) => String(item.priority || 'medium').toLowerCase().replace(/\s+priority$/, '')
-    return (rank[priority(a.item)] ?? 1) - (rank[priority(b.item)] ?? 1) || a.index - b.index
-  }).map(({ item }) => item)
-  const gaps = matchResult.skill_gaps || []
-  const recommendations = matchResult.recommendations || []
+  const canonicalSkills = matchResult.canonical_skills || []
+  const hasCanonicalSkills = canonicalSkills.length > 0
+  const matched = hasCanonicalSkills
+    ? canonicalSkills.filter((item) => item.status === 'matched').map((item) => ({
+      ...item,
+      skill_name: item.category_name,
+      match_type: 'evidence',
+      candidate_skill_level: item.candidate_level,
+    }))
+    : (matchResult.matched_skills || [])
+  const unassessed = hasCanonicalSkills
+    ? canonicalSkills.filter((item) => item.status === 'not_assessed').map((item) => ({
+      ...item,
+      skill_name: item.category_name,
+      source: 'category',
+    }))
+    : (matchResult.unassessed_skills || [])
+  const requiredSkillCount = hasCanonicalSkills
+    ? canonicalSkills.filter((item) => item.required_by_jd).length
+    : matched.length + unassessed.length
+  const notApplicableCount = hasCanonicalSkills
+    ? canonicalSkills.filter((item) => item.status === 'not_applicable').length
+    : 0
   const ambiguityAlerts = matchResult.ambiguity_alerts || []
 
   // SVG Dial
@@ -64,6 +94,37 @@ export function Step6Results({
       : confidence.toLowerCase() === 'low'
       ? 'error'
       : 'warning'
+
+  const showRoadmap = async () => {
+    setActiveSkillView('roadmap')
+    if (roadmapGraph || roadmap || isLoadingRoadmap) return
+
+    const companyId = talentResult?.company?.company_id || jdData?.company_id || jdData?.companyId
+    if (!profile) {
+      setRoadmapError('Candidate profile is required before a roadmap can be generated.')
+      return
+    }
+
+    const controller = new AbortController()
+    roadmapControllerRef.current?.abort()
+    roadmapControllerRef.current = controller
+    setRoadmapError('')
+    setIsLoadingRoadmap(true)
+    try {
+      const response = await api.getTalentCheckRoadmap(profile, companyId, {
+        jdSkills: jdData,
+        jdTitle: jdData?.job_title || jdData?.jobTitle || jdData?.title || talentResult?.assessment?.role,
+        signal: controller.signal,
+      })
+      setRoadmap(response.analysis?.learning_roadmap || [])
+      setRoadmapGraph(response.analysis?.roadmap_graph || null)
+    } catch (error) {
+      if (error.name !== 'AbortError') setRoadmapError(error.message || 'Unable to generate the learning roadmap.')
+    } finally {
+      if (!controller.signal.aborted) setIsLoadingRoadmap(false)
+      if (roadmapControllerRef.current === controller) roadmapControllerRef.current = null
+    }
+  }
 
   return (
     <div className="wizard-step-container" ref={resultsRef}>
@@ -99,6 +160,20 @@ export function Step6Results({
             <button id="result-talent-tab" type="button" role="tab" aria-selected={activeResultTab === 'talent'} aria-controls="result-talent-panel" className={activeResultTab === 'talent' ? 'is-active' : ''} onClick={() => setActiveResultTab('talent')}>
               <Building2 size={16} /><span>Talent Check</span>
             </button>
+            <button
+              id="result-roadmap-tab"
+              type="button"
+              role="tab"
+              aria-selected={activeResultTab === 'roadmap'}
+              aria-controls="result-roadmap-panel"
+              className={activeResultTab === 'roadmap' ? 'is-active' : ''}
+              onClick={() => {
+                setActiveResultTab('roadmap')
+                showRoadmap()
+              }}
+            >
+              <Compass size={16} /><span>Skill-Gap Roadmap</span>
+            </button>
         </div>
       )}
 
@@ -110,6 +185,34 @@ export function Step6Results({
       >
         {(!talentResult || activeResultTab === 'skill') && (
           <>
+        {talentResult && (
+          <div className="results-view-tabs" role="tablist" aria-label="Skill match detail views">
+            <button
+              id="results-gaps-tab"
+              type="button"
+              role="tab"
+              aria-selected={activeSkillView === 'gaps'}
+              aria-controls="results-gaps-panel"
+              className={activeSkillView === 'gaps' ? 'is-active' : ''}
+              onClick={() => setActiveSkillView('gaps')}
+            >
+              Gaps
+            </button>
+            <button
+              id="results-roadmap-tab"
+              type="button"
+              role="tab"
+              aria-selected={activeSkillView === 'roadmap'}
+              aria-controls="results-roadmap-panel"
+              className={activeSkillView === 'roadmap' ? 'is-active' : ''}
+              onClick={showRoadmap}
+            >
+              Open Roadmap
+            </button>
+          </div>
+        )}
+        {activeSkillView === 'gaps' ? (
+          <div id={talentResult ? 'results-gaps-panel' : undefined} role={talentResult ? 'tabpanel' : undefined} aria-labelledby={talentResult ? 'results-gaps-tab' : undefined} className="results-view-panel">
         {/* Score Dial & Overview Card */}
         <Card padding="lg" className="score-overview-card">
           <div className="score-dial-wrap">
@@ -135,13 +238,13 @@ export function Step6Results({
 
             <div className="score-details">
               <div className="score-confidence-row">
-                <span className="score-title">Role Match Score</span>
+                <span className="score-title">Evidence Match Score</span>
                 <Badge variant={confidenceBadgeVariant} size="sm">
                   {confidence.toUpperCase()} CONFIDENCE
                 </Badge>
               </div>
               <p className="score-subtitle">
-                Based on evidence signals across {matched.length + missing.length} role requirements.
+                Based on direct evidence across {requiredSkillCount} JD-required RADIX skills.
               </p>
               <div className="matched-counter-badges">
                 <span className="count-badge matched-count">
@@ -150,8 +253,9 @@ export function Step6Results({
                 </span>
                 <span className="count-badge missing-count">
                   <X size={12} strokeWidth={3} />
-                  {missing.length} Gaps
+                  {unassessed.length} Not assessed
                 </span>
+                {hasCanonicalSkills && <Badge variant="subtle">{notApplicableCount} Not required</Badge>}
               </div>
             </div>
           </div>
@@ -170,7 +274,7 @@ export function Step6Results({
           </div>
         )}
 
-        {/* Matched Skills vs Missing Skills Columns */}
+        {/* Matched requirements vs requirements without assessment evidence */}
         <div className={`matched-vs-missing-grid${stackSkillColumns ? ' stacked' : ''}`}>
           {/* Matched Skills */}
           <Card padding="md">
@@ -180,7 +284,7 @@ export function Step6Results({
                   <Check size={16} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <CardTitle as="h3">Matched Competencies ({matched.length})</CardTitle>
+                  <CardTitle as="h3">Matched RADIX Skills ({matched.length})</CardTitle>
                   <CardDescription>Requirements confirmed by candidate profile evidence.</CardDescription>
                 </div>
               </div>
@@ -213,7 +317,7 @@ export function Step6Results({
             </CardContent>
           </Card>
 
-          {/* Missing Skills */}
+          {/* Not assessed requirements */}
           <Card padding="md">
             <CardHeader>
               <div className="skills-col-header">
@@ -221,67 +325,64 @@ export function Step6Results({
                   <X size={16} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <CardTitle as="h3">Identified Skill Gaps ({missing.length})</CardTitle>
-                  <CardDescription>Required competencies without verified evidence.</CardDescription>
+                  <CardTitle as="h3">Not Assessed RADIX Skills ({unassessed.length})</CardTitle>
+                  <CardDescription>Required by the JD, but without direct profile evidence. These are not confirmed gaps.</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {missing.length > 0 ? (
+              {unassessed.length > 0 ? (
                 <div className="missing-skills-list">
-                {sortedMissing.map((item, idx) => (
+                {unassessed.map((item, idx) => (
                     <div key={`${item.skill_name}-${idx}`} className="missing-skill-item">
                       <div className="missing-skill-top">
                         <strong className="missing-skill-name">{item.skill_name}</strong>
-                        <Badge
-                          variant={String(item.priority || 'medium').toLowerCase().startsWith('high') ? 'error' : String(item.priority || '').toLowerCase().startsWith('low') ? 'success' : 'warning'}
-                          size="sm"
-                        >
-                          {item.priority?.toUpperCase()} PRIORITY
-                        </Badge>
+                        <Badge variant="subtle" size="sm">{item.source === 'technology' ? 'JD TOOL' : 'RADIX CATEGORY'}</Badge>
                       </div>
                       <p className="missing-reason-text">{item.reason}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="empty-subtext">Outstanding! No required competency gaps were found.</p>
+                <p className="empty-subtext">All unique JD requirements have direct supporting profile evidence.</p>
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Actionable Recommendations */}
-        {recommendations.length > 0 && (
-          <Card padding="md" className="recommendations-card">
-            <CardHeader>
-              <div className="skills-col-header">
-                <div className="icon-badge rec-badge">
-                  <Lightbulb size={16} strokeWidth={2.2} />
-                </div>
-                <div>
-                  <CardTitle as="h3">Actionable Next Steps to Close Gaps</CardTitle>
-                  <CardDescription>Targeted suggestions to improve candidate qualifications for this role.</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="recommendations-flow">
-                {recommendations.map((rec, i) => (
-                  <div key={i} className="rec-item">
-                    <strong className="rec-item-title">{rec.skill_name}</strong>
-                    <p className="rec-item-action">{rec.action}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          </div>
+        ) : (
+          <SkillGapRoadmap
+            talentResult={talentResult}
+            matchResult={matchResult}
+            jdData={jdData}
+            profile={profile}
+            roadmapGraph={roadmapGraph}
+            legacyRoadmap={roadmap}
+            isLoading={isLoadingRoadmap}
+            error={roadmapError}
+            onRetry={showRoadmap}
+          />
         )}
           </>
         )}
 
         {talentResult && activeResultTab === 'talent' && (
           <TalentCheckResults talentResult={talentResult} />
+        )}
+
+        {talentResult && activeResultTab === 'roadmap' && (
+          <SkillGapRoadmap
+            talentResult={talentResult}
+            matchResult={matchResult}
+            jdData={jdData}
+            profile={profile}
+            roadmapGraph={roadmapGraph}
+            legacyRoadmap={roadmap}
+            isLoading={isLoadingRoadmap}
+            error={roadmapError}
+            onRetry={showRoadmap}
+          />
         )}
 
         {/* Navigation & Reset Controls */}
@@ -318,11 +419,57 @@ export function Step6Results({
   )
 }
 
+function RoadmapResults({ roadmap, error, isLoading }) {
+  return (
+    <div id="results-roadmap-panel" role="tabpanel" aria-labelledby="results-roadmap-tab" className="results-view-panel">
+      <Card padding="lg" className="recommendations-card">
+        <CardHeader>
+          <div className="skills-col-header">
+            <div className="icon-badge rec-badge"><Lightbulb size={16} strokeWidth={2.2} /></div>
+            <div>
+              <CardTitle as="h3">Personalized Learning Roadmap</CardTitle>
+              <CardDescription>Prioritized next steps based on the completed company assessment.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="roadmap-status" role="status">Generating your roadmap…</p>
+          ) : error ? (
+            <Callout type="error" title="Roadmap unavailable">{error}</Callout>
+          ) : roadmap?.length ? (
+            <ol className="roadmap-list">
+              {roadmap.map((item, index) => (
+                <li key={`${item.week}-${item.focus}-${index}`} className="roadmap-item">
+                  <span className="roadmap-week">{item.week}</span>
+                  <div>
+                    <strong>{item.focus}</strong>
+                    {item.tasks?.length > 0 && <ul>{item.tasks.map((task, taskIndex) => <li key={taskIndex}>{task}</li>)}</ul>}
+                    <p><b>Milestone:</b> {item.milestone}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="roadmap-status">No roadmap steps are available for this assessment yet.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 function TalentCheckResults({ talentResult }) {
   const assessment = talentResult.assessment || talentResult
   const company = talentResult.company?.name || assessment.company || 'Selected company'
   const categories = assessment.skillset_gap || []
-  const readiness = assessment.readiness_score
+  const percentage = (value) => (
+    typeof value === 'number' && Number.isFinite(value)
+      ? Math.min(100, Math.max(0, value))
+      : null
+  )
+  const readiness = percentage(assessment.readiness_score)
+  const coverage = percentage(assessment.coverage_percentage)
 
   return (
     <>
@@ -331,24 +478,34 @@ function TalentCheckResults({ talentResult }) {
           <div className="skills-col-header">
             <div className="icon-badge rec-badge"><Building2 size={17} /></div>
             <div>
-              <CardTitle as="h3">Talent Check · {company}</CardTitle>
-              <CardDescription>{assessment.role ? `Assessment for ${assessment.role}` : 'Candidate skill levels compared with company requirements.'}</CardDescription>
+              <CardTitle as="h3">Assessment Overview</CardTitle>
+              <CardDescription>A quick view of readiness and assessment coverage for {company}.</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <ProgressBar
-            value={readiness ?? 0}
-            max={100}
-            label="Readiness score"
-            valueLabel={readiness == null ? 'Not assessed' : `${Math.round(readiness)}%`}
-          />
-          <ProgressBar
-            value={assessment.coverage_percentage || 0}
-            max={100}
-            label="Assessment coverage"
-            valueLabel={`${Math.round(assessment.coverage_percentage || 0)}%`}
-          />
+          <div className="talent-metric-bars">
+            <div className="talent-metric-bar" aria-label={readiness == null ? 'Readiness score not assessed' : `Readiness score ${Math.round(readiness)} percent`}>
+              <ProgressBar
+                value={readiness ?? 0}
+                max={100}
+                label="Readiness Score"
+                valueLabel={readiness == null ? 'Not assessed' : `${Math.round(readiness)}%`}
+                size="md"
+                variant="accent"
+              />
+            </div>
+            <div className="talent-metric-bar" aria-label={coverage == null ? 'Assessment coverage not assessed' : `Assessment coverage ${Math.round(coverage)} percent`}>
+              <ProgressBar
+                value={coverage ?? 0}
+                max={100}
+                label="Assessment Coverage"
+                valueLabel={coverage == null ? 'Not assessed' : `${Math.round(coverage)}%`}
+                size="md"
+                variant="success"
+              />
+            </div>
+          </div>
           <div className="matched-counter-badges">
             <span className="count-badge matched-count">{assessment.skills_meeting_requirement || 0} Meets requirement</span>
             <span className="count-badge missing-count">{assessment.skills_below_requirement || 0} Below requirement</span>

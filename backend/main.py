@@ -9,6 +9,7 @@ from routers.skills_matching import skill_matching_router
 from fastapi.middleware.cors import CORSMiddleware
 from routers.talent_check import talent_check_router
 from routers.db.company_matching import router as company_matching_router
+from routers.chat import chat_router
 
 app = FastAPI()
 
@@ -30,6 +31,7 @@ app.include_router(jd_analytics_router)
 app.include_router(skill_matching_router)
 app.include_router(talent_check_router)
 app.include_router(company_matching_router)
+app.include_router(chat_router)
 
 
 @app.get("/")

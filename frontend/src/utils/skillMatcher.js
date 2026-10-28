@@ -58,8 +58,25 @@ export function computeLocalSkillMatch(profile, jdData) {
 export function formatBackendMatchResponse(backendResponse, profile) {
   if (!backendResponse) return null
 
-  const matchedDetails = backendResponse.matched_skills || []
-  const missingDetails = backendResponse.missing_skills || []
+  const canonicalSkills = backendResponse.canonical_skills || []
+  const hasCanonicalSkills = canonicalSkills.length > 0
+
+  const matchedDetails = hasCanonicalSkills
+    ? canonicalSkills.filter((item) => item.status === 'matched').map((item) => ({
+        ...item,
+        skill_name: item.category_name,
+        match_type: 'evidence',
+        candidate_skill_level: item.candidate_level,
+      }))
+    : (backendResponse.matched_skills || [])
+  const missingDetails = hasCanonicalSkills
+    ? canonicalSkills.filter((item) => item.status === 'not_assessed' || item.status === 'gap').map((item) => ({
+        ...item,
+        skill_name: item.category_name,
+        source: 'category',
+        reason: item.reason,
+      }))
+    : (backendResponse.unassessed_skills || backendResponse.missing_skills || [])
   const matchedSkillNames = matchedDetails.map((skill) => skill.skill_name)
   const missingSkillNames = missingDetails.map((skill) => skill.skill_name)
 
@@ -85,6 +102,7 @@ export function formatBackendMatchResponse(backendResponse, profile) {
     recommendations: backendResponse.recommendations || [],
     skillGaps: backendResponse.skill_gaps || [],
     ambiguityAlerts: backendResponse.ambiguity_alerts || [],
+    canonicalSkills,
     source: 'backend',
   }
 }

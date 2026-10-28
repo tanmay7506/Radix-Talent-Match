@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ChevronDown, RefreshCw } from 'lucide-react'
 import { api } from '../../services/api'
 import { Badge, Button, Callout, Card, CardContent, CardHeader, CardTitle, EmptyState, PageHeader, ProgressBar, Spinner } from '../ui'
 import './CompanyMatchesPage.css'
@@ -77,7 +77,7 @@ export function CompanyMatchesPage({ profile, onNavigate }) {
           </div>
           <div className="company-match-page-list">
             {result.matches.slice(0, 6).map((company, index) => (
-              <CompanyCard key={company.company_id} company={company} rank={index + 1} />
+              <CompanyCard key={company.company_id} company={company} rank={index + 1} profile={profile} />
             ))}
           </div>
           <p className="company-match-page-score-note">{result.score_semantics}</p>
@@ -89,7 +89,7 @@ export function CompanyMatchesPage({ profile, onNavigate }) {
   )
 }
 
-function CompanyCard({ company, rank }) {
+function CompanyCard({ company, rank, profile }) {
   const requirements = (company.matched_skills || []).filter((skill) => skill.status !== 'missing')
 
   return (
@@ -110,19 +110,81 @@ function CompanyCard({ company, rank }) {
       <CardContent>
         <ProgressBar value={company.match_score} max={100} label="Requirement coverage" valueLabel={`${Math.round(company.match_score)}%`} variant="accent" />
 
-        <div className="company-match-table-wrap">
-          <table className="company-match-table">
-            <thead>
-              <tr><th scope="col">Skill</th><th scope="col">Level comparison</th><th scope="col">Candidate / required</th><th scope="col">Status</th></tr>
-            </thead>
-            <tbody>
-              {requirements.map((skill) => <SkillRow key={skill.skill_set_id} skill={skill} />)}
-            </tbody>
-          </table>
+        <div className="company-match-insights">
+          <details className="company-match-insight" open>
+            <summary>
+              <span><strong>Skill gaps</strong><small>Current level comparison</small></span>
+              <ChevronDown size={18} aria-hidden="true" />
+            </summary>
+            <div className="company-match-insight-content">
+              <div className="company-match-table-wrap">
+                <table className="company-match-table">
+                  <thead>
+                    <tr><th scope="col">Skill</th><th scope="col">Level comparison</th><th scope="col">Candidate / required</th><th scope="col">Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {requirements.map((skill) => <SkillRow key={skill.skill_set_id} skill={skill} />)}
+                  </tbody>
+                </table>
+              </div>
+              {company.incomplete_requirements && <p className="company-match-incomplete">Some company requirements were unavailable and were skipped.</p>}
+            </div>
+          </details>
+          <RoadmapPanel profile={profile} company={company} />
         </div>
-        {company.incomplete_requirements && <p className="company-match-incomplete">Some company requirements were unavailable and were skipped.</p>}
       </CardContent>
     </Card>
+  )
+}
+
+function RoadmapPanel({ profile, company }) {
+  const [roadmap, setRoadmap] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function loadRoadmap() {
+    if (roadmap || loading) return
+    setLoading(true)
+    setError('')
+    try {
+      const result = await api.getTalentCheckRoadmap(profile, company.company_id)
+      setRoadmap(result.analysis?.learning_roadmap || [])
+    } catch (err) {
+      setError(err.message || 'Unable to generate the roadmap.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <details className="company-match-insight company-match-roadmap" onToggle={(event) => { if (event.currentTarget.open) loadRoadmap() }}>
+      <summary>
+        <span><strong>Learning roadmap</strong><small>Personalized next steps</small></span>
+        <ChevronDown size={18} aria-hidden="true" />
+      </summary>
+      <div className="company-match-insight-content">
+        {loading ? (
+          <div className="company-match-roadmap-loading" role="status"><Spinner size="sm" /> Generating a roadmap…</div>
+        ) : error ? (
+          <Callout type="error" title="Roadmap unavailable">{error}</Callout>
+        ) : roadmap?.length ? (
+          <ol className="company-match-roadmap-list">
+            {roadmap.map((step, index) => (
+              <li key={`${step.week}-${step.focus}-${index}`}>
+                <span className="company-match-roadmap-week">{step.week}</span>
+                <div>
+                  <strong>{step.focus}</strong>
+                  {step.tasks?.length > 0 && <ul>{step.tasks.map((task, taskIndex) => <li key={taskIndex}>{task}</li>)}</ul>}
+                  <p><b>Milestone:</b> {step.milestone}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="company-match-roadmap-empty">Open this card to generate a company-specific learning roadmap.</p>
+        )}
+      </div>
+    </details>
   )
 }
 

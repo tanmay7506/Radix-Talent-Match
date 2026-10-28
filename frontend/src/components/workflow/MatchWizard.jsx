@@ -387,6 +387,7 @@ export function MatchWizard({
             matchResult={matchResult}
             profile={editedProfile || originalProfile}
             talentResult={talentResult}
+            jdData={jdData}
             stepNumber={7}
             stackSkillColumns
             onStartNew={handleStartNewAnalysis}

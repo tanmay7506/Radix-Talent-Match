@@ -182,8 +182,24 @@ export const api = {
     return await postJson(`/talent-check?company_id=${company}`, { profile }, signal)
   },
 
+  /** Generate a JD-specific learning roadmap from the Talent Check assessment. */
+  async getTalentCheckRoadmap(profile, companyId, { jdSkills = null, jdTitle = '', signal } = {}) {
+    const company = encodeURIComponent(companyId)
+    const payload = { profile }
+    if (jdSkills) payload.jd_skills = jdSkills
+    if (jdTitle) payload.jd_title = jdTitle
+    return await postJson(`/talent-check/analyze?company_id=${company}`, payload, signal)
+  },
+
   /** Rank companies using the current assessed candidate skills. */
   async getCompanyMatches(skills, { signal } = {}) {
     return await postJson('/company-matches', { skills }, signal)
   },
+
+  /** Send a message to the AI Chatbot agent */
+  async sendChatMessage(message, history = [], signal = null) {
+    return await postJson('/api/chat', { message, history }, signal)
+  },
 }
+
+export default api

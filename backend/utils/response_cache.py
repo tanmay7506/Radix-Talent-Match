@@ -18,12 +18,14 @@ _CACHE_PREFIX = "radix:response:v1"
 def _client() -> Redis:
     global _redis
     if _redis is None:
+        ssl_enabled = os.environ["REDIS_SSL"].strip().lower() in {"1", "true", "yes", "on"}
         _redis = Redis(
-            host="doctor-square-hyperprecise-25731.db.redis.io",
-            port=19552,
+            host=os.environ["REDIS_HOST"],
+            port=int(os.environ["REDIS_PORT"]),
             decode_responses=True,
-            username="default",
+            username=os.environ["REDIS_USERNAME"],
             password=os.environ["REDIS_KEY"],
+            ssl=ssl_enabled,
         )
     return _redis
 
