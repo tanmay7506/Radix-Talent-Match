@@ -63,7 +63,7 @@ export default function ProfilePage({ profile, setProfile, isLoading, loadError 
     if (draft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email)) { setError('Enter a valid email address.'); setSaving(false); return }
     try {
       const result = await profileService.saveProfile({ ...draft, manually_edited: true })
-      setDraft(result); setProfile(result); setSavedMessage(import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' ? 'Profile saved in temporary development storage. It will clear when this session reloads.' : 'Profile changes saved.')
+      setDraft(result); setProfile(result); setSavedMessage((import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV) ? 'Profile saved in temporary development storage. It will clear when this session reloads.' : 'Profile changes saved.')
     } catch (e) { setError(e.message || 'Unable to save profile. Try again.') }
     finally { setSaving(false) }
   }
@@ -82,7 +82,7 @@ export default function ProfilePage({ profile, setProfile, isLoading, loadError 
     {savedMessage && <p className="profile-status" role="status">{savedMessage}</p>}
     {loadError && <Callout type="error" role="alert">{loadError} {onRetry && <button type="button" onClick={() => onRetry()}>Retry</button>}</Callout>}
     {notice && <Callout type="warning" role="status">{notice}</Callout>}
-    {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' && <Callout type="warning">Development mock mode: profile data is kept in memory and clears on refresh.</Callout>}
+    {(import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV) && <Callout type="warning">Development mock mode: profile data is kept in memory and clears on refresh.</Callout>}
     {isLoading && !draft && <LoadingOverlay className="profile-loading-card" message="Fetching your profile…" />}
     {extracting && <LoadingOverlay className="profile-extraction-card" message="Uploading and extracting resume information…" />}
     {!draft && !isLoading && !extracting && <EmptyState icon={<ClipboardList size={28} />} title={loadError ? 'Profile could not load' : 'Start your profile'} description={loadError ? 'You can retry loading, create a manual profile, or use a resume to start over.' : 'Upload a resume to extract a first draft, or create your profile manually.'} action={<div className="profile-actions"><Button variant="primary" onClick={() => setDraft({ name: '', email: '', source: 'manual', skills: [], education: {}, internships: [], hackathons: [], certifications: [], preferred_roles: [] })}>Create profile manually</Button><Button variant="secondary" onClick={() => fileRef.current?.click()}>Upload resume</Button></div>} />}

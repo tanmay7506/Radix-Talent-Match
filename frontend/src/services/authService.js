@@ -2,7 +2,7 @@
 // in-memory and is not authentication suitable for production.
 import { api } from './api'
 let session = null
-const mockEnabled = () => import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true'
+const mockEnabled = () => import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV
 
 async function request(path, body) {
   const response = await fetch(`${api.baseUrl}/auth/${path}`, {

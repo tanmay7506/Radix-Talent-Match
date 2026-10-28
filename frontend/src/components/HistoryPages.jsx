@@ -92,7 +92,7 @@ export function MatchHistoryPage() {
   return (
     <div className="history-page">
       <PageHeader title="Match history" description="Review saved role alignment results." />
-      {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' && <p className="route-note">Development mock mode: history is temporary and clears on refresh.</p>}
+      {(import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV) && <p className="route-note">Development mock mode: history is temporary and clears on refresh.</p>}
       {loading && <p role="status">Loading match history…</p>}
       {error && (
         <div className="history-error" role="alert">

@@ -4,11 +4,12 @@ import { notifySessionExpired } from './sessionEvents'
 // Provisional contract until profile persistence endpoints are defined.
 const devProfiles = new Map()
 let activeProfileId = 'current'
+const mockEnabled = () => import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV
 
 export const profileService = {
   /** @returns {Promise<import('./contracts').CandidateProfile|null>} */
   async getProfile({ signal } = {}) {
-    if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true') {
+    if (mockEnabled()) {
       return devProfiles.get(activeProfileId) || null
     }
     const response = await fetch(`${api.baseUrl}/profiles/me`, { signal, credentials: 'include' })
@@ -19,7 +20,7 @@ export const profileService = {
   },
   /** @param {import('./contracts').CandidateProfile} profile */
   async saveProfile(profile, { signal } = {}) {
-    if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true') {
+    if (mockEnabled()) {
       const saved = { ...profile, updated_at: new Date().toISOString() }
       devProfiles.set(activeProfileId, saved)
       return saved
