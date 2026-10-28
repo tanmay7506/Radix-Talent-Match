@@ -35,6 +35,20 @@ PROFILE_SKILL_CODES: dict[str, SkillCode] = {
     "Networking": "NET",
     "Operating Systems": "OS",
     "Outside These Category": "OTH",
+    # Profile extraction prompt labels — the LLM is instructed to use these exact strings
+    # in the SKILL SETS section of profile_extraction_prompt. Without these mappings,
+    # map_skill_metadata() cannot assign the correct skill_code and the candidate's skills
+    # remain tagged 'OTH', which prevents the talent-check scoring from reading them.
+    "Data Structures and Algorithms": "DSA",
+    "Aptitude and Problem Solving": "APT",
+    "Communication Skills": "COM",
+    "Object-Oriented Programming and Design": "OOD",
+    "AI Native Engineering": "AI",
+    "SQL and Design": "SQL",
+    "System Design and Architecture": "SYS",
+    "DevOps and Cloud": "CLD",
+    "Computer Networking": "NET",
+    "Operating System": "OS",
 }
 
 TALENT_CATEGORIES = (
@@ -65,13 +79,36 @@ TALENT_CATEGORY_ALIASES = {
     "dsa": "DSA",
     "object-oriented design": "OOD",
     "object oriented design": "OOD",
+    # Aliases for the profile extraction prompt's skill labels (prompt uses these exact
+    # strings as category names; without these aliases the LLM output from JD extraction
+    # that mirrors those labels would map to OTH and be silently dropped).
+    "object oriented programming and design": "OOD",
+    "object-oriented programming and design": "OOD",
+    "object oriented programming": "OOD",
     "aptitude": "APTI",
+    "aptitude and problem solving": "APTI",
+    "quantitative aptitude": "APTI",
     "communication": "COMM",
+    "communication skills": "COMM",
     "artificial intelligence": "AI",
+    # CLOUD canonical display name and common variants used by the JD extractor LLM.
+    "cloud computing": "CLOUD",
     "cloud": "CLOUD",
+    "devops and cloud": "CLOUD",
+    "cloud and devops": "CLOUD",
+    "cloud native": "CLOUD",
+    # AI variants used by the JD extractor and profile extraction LLM.
+    "ai native engineering": "AI",
+    "ai engineering": "AI",
+    # SQL variants used by the profile extraction prompt.
+    "sql and design": "SQL",
     "sql": "SQL",
     "software engineering": "SWE",
     "system design": "SYSD",
+    # System design variants used by the profile extraction prompt.
+    "system design and architecture": "SYSD",
+    "systems architecture": "SYSD",
+    "systems design": "SYSD",
     "networking": "NETW",
     "operating systems": "OS",
     "outside these category": "OTHER",

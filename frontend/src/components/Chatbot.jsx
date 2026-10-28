@@ -1,28 +1,15 @@
 import { useState, useRef, useEffect, useId } from 'react'
 import { MessageSquare, X, Send, Bot, Sparkles, User, AlertCircle } from 'lucide-react'
+import { api } from '../services/api'
 import './Chatbot.css'
 
 /**
- * Floating Chatbot component.
- *
- * Backend status: No chatbot API endpoint exists in the current backend.
- * This component provides a complete UI and a clearly marked integration point
- * (sendToBackend) that can be wired to a future LLM/chatbot endpoint.
- *
- * It is completely honest with users: an explicit disclaimer is shown at the bottom
- * of the panel stating that responses are stubbed.
+ * Floating Chatbot component connected to the RADIX AI Agent.
  */
 
-// Integration point: swap this function body with a real fetch when an endpoint is added.
-async function sendToBackend(_message) {
-  // e.g.:
-  // const res = await fetch('/api/chat', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ message }),
-  // })
-  // return (await res.json()).reply
-  throw new Error('No chatbot endpoint configured')
+async function sendToBackend(message, history = []) {
+  const res = await api.sendChatMessage(message, history)
+  return res.reply || res.message || res
 }
 
 const STUB_RESPONSES = [
@@ -40,7 +27,7 @@ export default function Chatbot() {
     {
       id: 1,
       role: 'assistant',
-      text: "Hi! I'm the RADIX Talent Match Assistant. I can help answer questions about your profile, resume parsing, and skill match scoring.",
+      text: "Hi! I'm the RADIX Talent Match Assistant. I can help answer questions about your profile, resume parsing, skill match scoring, and skill-gap learning roadmaps.",
     },
   ])
   const [input, setInput]       = useState('')
@@ -76,15 +63,20 @@ export default function Chatbot() {
     if (!text || loading) return
 
     const userMsg = { id: Date.now(), role: 'user', text }
-    setMessages((prev) => [...prev, userMsg])
+    const updatedMessages = [...messages, userMsg]
+    setMessages(updatedMessages)
     setInput('')
     setLoading(true)
 
     try {
-      const reply = await sendToBackend(text)
+      const history = messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({ role: m.role, text: m.text }))
+
+      const reply = await sendToBackend(text, history)
       setMessages((prev) => [...prev, { id: Date.now() + 1, role: 'assistant', text: reply }])
-    } catch {
-      // Transparent stub response
+    } catch (err) {
+      console.warn('Chatbot LLM API failed, showing helpful fallback:', err)
       const stub = STUB_RESPONSES[stubIdx % STUB_RESPONSES.length]
       stubIdx++
       setMessages((prev) => [
@@ -143,7 +135,7 @@ export default function Chatbot() {
               <div className="chatbot-header-name">RADIX Assistant</div>
               <div className="chatbot-header-status">
                 <span className="chatbot-status-dot" aria-hidden="true"/>
-                <span>RADIX Talent Match</span>
+                <span>AI Career Agent</span>
               </div>
             </div>
             <button
@@ -215,9 +207,9 @@ export default function Chatbot() {
             </button>
           </div>
 
-          {/* Transparency notice */}
+          {/* AI notice */}
           <div className="chatbot-notice">
-            Not connected to a live AI · responses are placeholder answers
+            Powered by RADIX AI Agent · Responses aligned with RADIX skill benchmarks
           </div>
         </div>
       )}

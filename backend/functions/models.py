@@ -8,6 +8,6 @@ model_genai = init_chat_model(
 )
 
 model = ChatOpenRouter(
-    model="nvidia/nemotron-3-ultra-550b-a55b:free",
+    model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
     base_url="https://openrouter.ai/api/v1",
 )
