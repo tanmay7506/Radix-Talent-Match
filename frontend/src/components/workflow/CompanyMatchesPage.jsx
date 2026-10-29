@@ -20,10 +20,56 @@ function loadMatches(skills) {
   return request
 }
 
+function formatDisplayName(company) {
+  const shortName = (company?.short_name || '').trim()
+  const companyName = (company?.company_name || '').trim()
+  let name = shortName || companyName || 'Company'
+
+  // Clean all-caps company names like KALVI CAREER EDUCATION PRIVATE LIMITED
+  if (name === name.toUpperCase() && name.length > 3) {
+    name = name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase())
+  }
+
+  // Remove trailing corporate legal forms for clean title presentation
+  const cleaned = name
+    .replace(/\s*(\(Subsidiary.*?\)|Private Limited|Pvt\.?\s*Ltd\.?|Limited|plc|Inc\.?|LLC|Corp\.?)\.?$/i, '')
+    .trim()
+
+  return cleaned || name
+}
+
+function cleanLegalName(name) {
+  if (!name || typeof name !== 'string') return ''
+  const trimmed = name.trim()
+  if (trimmed === trimmed.toUpperCase() && trimmed.length > 3) {
+    return trimmed.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase())
+  }
+  return trimmed
+}
+
 export function CompanyMatchesPage({ profile, onNavigate }) {
   const pageRef = useRef(null)
-  const skills = (profile?.skills || []).filter((skill) => skill?.skill_code && Number.isInteger(Number(skill.skill_level)))
-    .map(({ skill_code, skill_level }) => ({ skill_code, skill_level: Number(skill_level) }))
+
+  // Normalize and deduplicate candidate skills by skill code
+  const skillMap = new Map()
+  ;(profile?.skills || []).forEach((skill) => {
+    const rawCode = (skill?.skill_code || skill?.code || '').trim().toUpperCase()
+    const level = Number(skill?.skill_level)
+    if (rawCode && !isNaN(level)) {
+      const canonicalCode =
+        rawCode === 'CLD' ? 'CLOUD' :
+        rawCode === 'APT' ? 'APTI' :
+        rawCode === 'COM' ? 'COMM' :
+        rawCode === 'SYS' ? 'SYSD' :
+        rawCode === 'NET' ? 'NETW' : rawCode
+      const current = skillMap.get(canonicalCode)
+      const clampedLevel = Math.max(1, Math.min(10, Math.round(level)))
+      if (current === undefined || clampedLevel > current) {
+        skillMap.set(canonicalCode, clampedLevel)
+      }
+    }
+  })
+  const skills = Array.from(skillMap.entries()).map(([skill_code, skill_level]) => ({ skill_code, skill_level }))
   const skillKey = JSON.stringify(skills)
   const [resultState, setResultState] = useState(() => ({ key: skillKey, value: resultCache.get(skillKey) || null }))
   const [errorState, setErrorState] = useState({ key: '', value: '' })
@@ -77,7 +123,7 @@ export function CompanyMatchesPage({ profile, onNavigate }) {
           </div>
           <div className="company-match-page-list">
             {result.matches.slice(0, 6).map((company, index) => (
-              <CompanyCard key={company.company_id} company={company} rank={index + 1} profile={profile} />
+              <CompanyCard key={company.company_id} company={company} rank={index + 1} />
             ))}
           </div>
           <p className="company-match-page-score-note">{result.score_semantics}</p>
@@ -89,17 +135,26 @@ export function CompanyMatchesPage({ profile, onNavigate }) {
   )
 }
 
-function CompanyCard({ company, rank, profile }) {
+function CompanyCard({ company, rank }) {
   const requirements = (company.matched_skills || []).filter((skill) => skill.status !== 'missing')
+  const displayName = formatDisplayName(company)
+  const category = (company.category || '').trim()
+  const rawFullName = cleanLegalName(company.company_name || '')
+  const showLegalName = rawFullName && rawFullName.toLowerCase() !== displayName.toLowerCase()
 
   return (
     <Card padding="lg" className="company-match-page-card">
       <CardHeader className="company-match-card-header">
         <div className="company-match-card-title">
           <span className="company-match-rank">{String(rank).padStart(2, '0')}</span>
-          <div>
-            <CardTitle as="h2">{company.company_name}</CardTitle>
-            {company.category && <p className="company-match-page-category">{company.category}</p>}
+          <div className="company-match-title-content">
+            <div className="company-match-name-row">
+              <CardTitle as="h2" className="company-match-heading">{displayName}</CardTitle>
+              {category && <span className="company-match-category-tag">{category}</span>}
+            </div>
+            {showLegalName && (
+              <p className="company-match-legal-name">{rawFullName}</p>
+            )}
           </div>
         </div>
         <div className="company-match-card-score">
@@ -130,61 +185,9 @@ function CompanyCard({ company, rank, profile }) {
               {company.incomplete_requirements && <p className="company-match-incomplete">Some company requirements were unavailable and were skipped.</p>}
             </div>
           </details>
-          <RoadmapPanel profile={profile} company={company} />
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function RoadmapPanel({ profile, company }) {
-  const [roadmap, setRoadmap] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function loadRoadmap() {
-    if (roadmap || loading) return
-    setLoading(true)
-    setError('')
-    try {
-      const result = await api.getTalentCheckRoadmap(profile, company.company_id)
-      setRoadmap(result.analysis?.learning_roadmap || [])
-    } catch (err) {
-      setError(err.message || 'Unable to generate the roadmap.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <details className="company-match-insight company-match-roadmap" onToggle={(event) => { if (event.currentTarget.open) loadRoadmap() }}>
-      <summary>
-        <span><strong>Learning roadmap</strong><small>Personalized next steps</small></span>
-        <ChevronDown size={18} aria-hidden="true" />
-      </summary>
-      <div className="company-match-insight-content">
-        {loading ? (
-          <div className="company-match-roadmap-loading" role="status"><Spinner size="sm" /> Generating a roadmap…</div>
-        ) : error ? (
-          <Callout type="error" title="Roadmap unavailable">{error}</Callout>
-        ) : roadmap?.length ? (
-          <ol className="company-match-roadmap-list">
-            {roadmap.map((step, index) => (
-              <li key={`${step.week}-${step.focus}-${index}`}>
-                <span className="company-match-roadmap-week">{step.week}</span>
-                <div>
-                  <strong>{step.focus}</strong>
-                  {step.tasks?.length > 0 && <ul>{step.tasks.map((task, taskIndex) => <li key={taskIndex}>{task}</li>)}</ul>}
-                  <p><b>Milestone:</b> {step.milestone}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="company-match-roadmap-empty">Open this card to generate a company-specific learning roadmap.</p>
-        )}
-      </div>
-    </details>
   )
 }
 
