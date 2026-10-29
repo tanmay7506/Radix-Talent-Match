@@ -1,5 +1,8 @@
 import { api } from './api'
 import { notifySessionExpired } from './sessionEvents'
+import { getAccessToken } from './authSession'
+
+const authHeaders = (headers = {}) => getAccessToken() ? { ...headers, Authorization: `Bearer ${getAccessToken()}` } : headers
 
 // Provisional result schema: id, created_at, job_title/company/score are optional.
 const devResults = []
@@ -9,7 +12,7 @@ export const resultsService = {
   /** @returns {Promise<import('./contracts').SavedMatchResult[]>} */
   async listResults({ signal } = {}) {
     if (mockEnabled()) return [...devResults]
-    const response = await fetch(`${api.baseUrl}/match-results`, { signal, credentials: 'include' })
+    const response = await fetch(`${api.baseUrl}/match-results`, { signal, credentials: 'include', headers: authHeaders() })
     notifySessionExpired(response)
     if (!response.ok) throw new Error(`Unable to load match history (${response.status}).`)
     return response.json()
@@ -17,7 +20,7 @@ export const resultsService = {
   /** @param {string} id @returns {Promise<import('./contracts').SavedMatchResult|null>} */
   async getResultById(id, { signal } = {}) {
     if (mockEnabled()) return devResults.find((result) => result.id === id) || null
-    const response = await fetch(`${api.baseUrl}/match-results/${encodeURIComponent(id)}`, { signal, credentials: 'include' })
+    const response = await fetch(`${api.baseUrl}/match-results/${encodeURIComponent(id)}`, { signal, credentials: 'include', headers: authHeaders() })
     notifySessionExpired(response)
     if (response.status === 404) return null
     if (!response.ok) throw new Error(`Unable to load result (${response.status}).`)
@@ -32,7 +35,7 @@ export const resultsService = {
       return saved
     }
     const response = await fetch(`${api.baseUrl}/match-results`, {
-      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result),
+      method: 'POST', credentials: 'include', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(result),
     })
     notifySessionExpired(response)
     if (!response.ok) throw new Error(`Unable to save result (${response.status}).`)

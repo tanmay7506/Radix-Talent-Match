@@ -1,5 +1,6 @@
 import { api } from './api'
 import { notifySessionExpired } from './sessionEvents'
+import { getAccessToken } from './authSession'
 
 // Provisional contract until profile persistence endpoints are defined.
 const devProfiles = new Map()
@@ -12,7 +13,8 @@ export const profileService = {
     if (mockEnabled()) {
       return devProfiles.get(activeProfileId) || null
     }
-    const response = await fetch(`${api.baseUrl}/profiles/me`, { signal, credentials: 'include' })
+    const token = getAccessToken()
+    const response = await fetch(`${api.baseUrl}/profiles/me`, { signal, credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} })
     notifySessionExpired(response)
     if (response.status === 404) return null
     if (!response.ok) throw new Error(`Unable to load profile (${response.status}).`)
@@ -27,7 +29,7 @@ export const profileService = {
     }
     const response = await fetch(`${api.baseUrl}/profiles/me`, {
       method: 'PUT', credentials: 'include', signal,
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile),
+      headers: { 'Content-Type': 'application/json', ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}) }, body: JSON.stringify(profile),
     })
     notifySessionExpired(response)
     if (!response.ok) throw new Error(`Unable to save profile (${response.status}).`)

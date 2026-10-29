@@ -1,53 +1,67 @@
-// Provisional backend contract. The development provider is intentionally
-// in-memory and is not authentication suitable for production.
 import { api } from './api'
+import { setAccessToken } from './authSession'
+
 let session = null
-const mockEnabled = () => import.meta.env.VITE_ENABLE_DEV_MOCKS === 'true' || import.meta.env.DEV
+let refreshTimer = null
+
+function clearRefreshTimer() {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = null
+}
+
+function keepSession(nextSession) {
+  session = nextSession
+  setAccessToken(nextSession?.access_token)
+  clearRefreshTimer()
+  if (!nextSession) return
+  const delay = Math.max(1000, new Date(nextSession.expires_at).getTime() - Date.now() - 60_000)
+  refreshTimer = setTimeout(async () => {
+    try { keepSession(await request('refresh')) }
+    catch {
+      session = null
+      setAccessToken(null)
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('radix:session-expired'))
+    }
+  }, delay)
+}
 
 async function request(path, body) {
   const response = await fetch(`${api.baseUrl}/auth/${path}`, {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: body ? JSON.stringify(body) : undefined,
   })
-  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || `Request failed (${response.status}).`)
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.detail || `Request failed (${response.status}).`)
+  }
+  if (response.status === 204) return null
   return response.json()
 }
 
 export const authService = {
-  /** @param {import('./contracts').LoginRequest} credentials */
   async login({ email, password }) {
-    if (mockEnabled()) {
-      session = { user: { id: 'dev-user', name: email.split('@')[0], email }, expiresAt: null }
-      return session
-    }
-    session = await request('login', { email, password })
+    keepSession(await request('login', { email, password }))
     return session
   },
-  /** @param {import('./contracts').SignupRequest} account */
   async signup({ name, email, password }) {
-    if (mockEnabled()) {
-      session = { user: { id: 'dev-user', name, email }, expiresAt: null }
-      return session
-    }
-    session = await request('signup', { name, email, password })
+    keepSession(await request('register', { name, email, password }))
     return session
   },
   async logout() {
-    try {
-      if (!mockEnabled()) await fetch(`${api.baseUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
-    } finally { session = null }
+    try { await request('logout') } finally { keepSession(null) }
   },
-  clearSession() { session = null },
+  clearSession() { keepSession(null) },
   async getSession() {
-    if (mockEnabled()) return session
-    const response = await fetch(`${api.baseUrl}/auth/session`, { credentials: 'include' })
-    if (response.status === 401) { session = null; return null }
-    if (!response.ok) throw new Error(`Unable to check session (${response.status}).`)
-    session = await response.json()
-    return session
+    try {
+      keepSession(await request('session'))
+      return session
+    } catch (error) {
+      keepSession(null)
+      if (/401|Refresh token/i.test(error.message)) return null
+      throw error
+    }
   },
   async getCurrentUser() {
-    try { return (await this.getSession())?.user || null }
-    catch { return null }
+    return session?.user || null
   },
 }

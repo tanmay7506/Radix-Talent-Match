@@ -24,8 +24,14 @@
 .profile-review-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  align-items: stretch;
   gap: var(--space-5);
   margin-bottom: var(--space-5);
+}
+
+.profile-review-grid > .ui-card {
+  height: 100%;
+  box-sizing: border-box;
 }
 
 /* Edit form stack */
