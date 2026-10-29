@@ -7,9 +7,9 @@ import {
   Tag as TagIcon,
 } from 'lucide-react'
 import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Callout, Tag, Badge, LoadingOverlay } from '../ui'
-import './Step4JdReview.css'
+import './Step1JdAnalytics.css'
 
-export function Step4JdReview({
+export function Step1JdAnalytics({
   jdData,
   onRetry,
   onBack,
@@ -27,7 +27,7 @@ export function Step4JdReview({
   return (
     <div className="wizard-step-container">
       <div className="wizard-step-header">
-        <h2>Step 4: Review Extracted Role Requirements</h2>
+        <h2>Step 1: Review Extracted Role Requirements</h2>
         <p>
           The AI engine has parsed the job description into standardized RADIX competency categories and specific technical tools. Review what the position requires before matching.
         </p>

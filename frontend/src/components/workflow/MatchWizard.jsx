@@ -5,12 +5,12 @@ import { profileService } from '../../services/profileService'
 import { resultsService } from '../../services/resultsService'
 import { PageHeader } from '../ui/PageHeader'
 import { WizardStepper } from './WizardStepper'
-import { Step1Resume } from './Step1Resume'
-import { Step2ProfileReview } from './Step2ProfileReview'
-import { Step3JobDescription } from './Step3JobDescription'
-import { Step4JdReview } from './Step4JdReview'
+import { Step2Resume } from './Step2Resume'
+import { Step3ProfileBuilder } from './Step3ProfileBuilder'
+import { Step1JdInput } from './Step1JdInput'
+import { Step1JdAnalytics } from './Step1JdAnalytics'
 import { Step5SkillMatching } from './Step5SkillMatching'
-import { Step6TalentCheck } from './Step6TalentCheck'
+import { Step4TalentCheck } from './Step4TalentCheck'
 import { Step6Results } from './Step6Results'
 import './MatchWizard.css'
 
@@ -28,27 +28,27 @@ export function MatchWizard({
   const initialJdSeededRef = useRef(Boolean(initialJdData))
   const startedNewAnalysisRef = useRef(false)
 
-  // ── Step 1 State: Resume ────────────────────────────────────────────────
+  // ── Step 2 State: Resume ────────────────────────────────────────────────
   const [resumeFile, setResumeFile] = useState(null)
   const [isUploadingResume, setIsUploadingResume] = useState(false)
   const [resumeError, setResumeError] = useState(null)
 
-  // ── Step 2 State: Profile ───────────────────────────────────────────────
+  // ── Step 3 State: Profile ───────────────────────────────────────────────
   const [originalProfile, setOriginalProfile] = useState(initialProfile)
   const [editedProfile, setEditedProfile] = useState(initialProfile)
   const [isProfileEdited, setIsProfileEdited] = useState(false)
 
-  // ── Step 3 State: Job Description ───────────────────────────────────────
-  const [jdInputMode, setJdInputMode] = useState('text') // 'text' | 'file'
+  // ── Step 1 State: Job Description ───────────────────────────────────────
+  const [jdInputMode, setJdInputMode] = useState('file') // 'text' | 'file'
   const [jdText, setJdText] = useState('')
   const [jdFile, setJdFile] = useState(null)
   const [isAnalyzingJd, setIsAnalyzingJd] = useState(false)
   const [jdError, setJdError] = useState(null)
 
-  // ── Step 4 State: JD Extraction ─────────────────────────────────────────
+  // ── Step 1 State: JD Extraction ─────────────────────────────────────────
   const [jdData, setJdData] = useState(initialJdData)
 
-  // ── Step 5–7 State: Skill Matching, Talent Check & Results ──────────────
+  // ── Step 4–6 State: Talent Check, Skill Matching & Results ──────────────
   const [matchResult, setMatchResult] = useState(null)
   const [talentResult, setTalentResult] = useState(null)
   const [isMatching, setIsMatching] = useState(false)
@@ -88,7 +88,7 @@ export function MatchWizard({
     if (!initialProfile) return
     const profile = JSON.parse(JSON.stringify(initialProfile))
     setOriginalProfile(profile); setEditedProfile(profile); setIsProfileEdited(false)
-    setMatchResult(null); setTalentResult(null); setMaxStepReached((prev) => Math.max(prev, 2)); goToStep(2)
+    setMatchResult(null); setTalentResult(null); setMaxStepReached((prev) => Math.max(prev, 3)); goToStep(3)
   }
 
   // ── Navigation between steps ────────────────────────────────────────────
@@ -97,7 +97,7 @@ export function MatchWizard({
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // ── Step 1: Resume Upload Submission ────────────────────────────────────
+  // ── Step 2: Resume Upload Submission ────────────────────────────────────
   const handleResumeSubmit = async (file) => {
     if (!file || isUploadingResume) return
     setResumeError(null)
@@ -120,8 +120,8 @@ export function MatchWizard({
 
       if (onProfileSynced) onProfileSynced(data)
 
-      setMaxStepReached((prev) => Math.max(prev, 2))
-      goToStep(2)
+      setMaxStepReached((prev) => Math.max(prev, 3))
+      goToStep(3)
     } catch (err) {
       if (err.name !== 'AbortError') setResumeError(err.message || 'Failed to extract candidate profile.')
     } finally {
@@ -130,7 +130,7 @@ export function MatchWizard({
     }
   }
 
-  // When a user selects a new file in Step 1, invalidate downstream profile
+  // When a user selects a new file in Step 2, invalidate downstream profile
   const handleResumeFileChange = (newFile) => {
     setResumeFile(newFile)
     if (!newFile) {
@@ -139,11 +139,11 @@ export function MatchWizard({
       setIsProfileEdited(false)
       setMatchResult(null)
       setTalentResult(null)
-      setMaxStepReached(1)
+      setMaxStepReached(2)
     }
   }
 
-  // ── Step 2: Profile Review Edits ────────────────────────────────────────
+  // ── Step 3: Profile Review Edits ────────────────────────────────────────
   const handleProfileChange = (updatedProfile) => {
     setEditedProfile(updatedProfile)
     setIsProfileEdited(true)
@@ -167,7 +167,7 @@ export function MatchWizard({
       if (onProfileSynced) onProfileSynced(reviewedProfile)
       setProfilePersistenceWarning(`Your reviewed profile could not be saved. This match will use the reviewed draft. ${err.message}`)
     }
-    setMaxStepReached((prev) => Math.max(prev, 3)); goToStep(3)
+    setMaxStepReached((prev) => Math.max(prev, 4)); goToStep(4)
   }
 
   const handleResetOriginalProfile = () => {
@@ -180,7 +180,7 @@ export function MatchWizard({
     }
   }
 
-  // ── Step 3: Job Description Input ───────────────────────────────────────
+  // ── Step 1: Job Description Input ───────────────────────────────────────
   const handleJdInputChange = ({ mode, text, file }) => {
     setJdInputMode(mode)
     setJdText(text)
@@ -212,8 +212,8 @@ export function MatchWizard({
       setTalentResult(null)
       if (onJdSynced) onJdSynced(data)
 
-      setMaxStepReached((prev) => Math.max(prev, 4))
-      goToStep(4)
+      setMaxStepReached((prev) => Math.max(prev, 1))
+      goToStep(1)
     } catch (err) {
       if (err.name !== 'AbortError') setJdError(err.message || 'Failed to parse job description.')
       // Stay on step 3 to show error and allow quick correction
@@ -256,8 +256,6 @@ export function MatchWizard({
         }).catch(() => {})
       }
       setMaxStepReached((prev) => Math.max(prev, 6))
-      // Continue to the company talent-check step after skill matching.
-      goToStep(6)
     } catch (err) {
       if (err.name !== 'AbortError') setMatchingError(err.message || 'Failed to calculate role alignment.')
     } finally {
@@ -266,13 +264,14 @@ export function MatchWizard({
     }
   }
 
-  // ── Step 7: Start New Analysis ──────────────────────────────────────────
+  // ── Start New Analysis ──────────────────────────────────────────────────
   const handleStartNewAnalysis = () => {
     startedNewAnalysisRef.current = true
     setResumeFile(null)
     setOriginalProfile(null)
     setEditedProfile(null)
     setIsProfileEdited(false)
+    setJdInputMode('file')
     setJdText('')
     setJdFile(null)
     setJdData(null)
@@ -302,8 +301,35 @@ export function MatchWizard({
       {profilePersistenceWarning && <div className="wizard-persistence-warning" role="status">{profilePersistenceWarning}</div>}
 
       <div className="wizard-step-stage">
-        {currentStep === 1 && (
-          <Step1Resume
+        {currentStep === 1 && !jdData && (
+          <Step1JdInput
+            inputMode={jdInputMode}
+            jdText={jdText}
+            jdFile={jdFile}
+            onInputChange={handleJdInputChange}
+            onSubmit={handleJdSubmit}
+            onBack={() => {}}
+            isProcessing={isAnalyzingJd}
+            error={jdError}
+          />
+        )}
+
+        {currentStep === 1 && jdData && (
+          <Step1JdAnalytics
+            jdData={jdData}
+            onRetry={() => handleJdSubmit({ mode: jdInputMode, text: jdText, file: jdFile })}
+            onBack={() => setJdData(null)}
+            onNext={() => {
+              setMaxStepReached((prev) => Math.max(prev, 2))
+              goToStep(2)
+            }}
+            isProcessing={isAnalyzingJd}
+            error={jdError}
+          />
+        )}
+
+        {currentStep === 2 && (
+          <Step2Resume
             selectedFile={resumeFile}
             onFileChange={handleResumeFileChange}
             onSubmit={handleResumeSubmit}
@@ -316,43 +342,29 @@ export function MatchWizard({
           />
         )}
 
-        {currentStep === 2 && editedProfile && (
-          <Step2ProfileReview
+        {currentStep === 3 && editedProfile && (
+          <Step3ProfileBuilder
             originalProfile={originalProfile}
             profile={editedProfile}
             onProfileChange={handleProfileChange}
             onResetOriginal={handleResetOriginalProfile}
-            onBack={() => goToStep(1)}
+            onBack={() => goToStep(2)}
             onNext={handleConfirmProfile}
             isEdited={isProfileEdited}
             error={resumeError}
           />
         )}
 
-        {currentStep === 3 && (
-          <Step3JobDescription
-            inputMode={jdInputMode}
-            jdText={jdText}
-            jdFile={jdFile}
-            onInputChange={handleJdInputChange}
-            onSubmit={handleJdSubmit}
-            onBack={() => goToStep(2)}
-            isProcessing={isAnalyzingJd}
-            error={jdError}
-          />
-        )}
-
         {currentStep === 4 && (
-          <Step4JdReview
+          <Step4TalentCheck
+            profile={editedProfile || originalProfile}
             jdData={jdData}
-            onRetry={() => handleJdSubmit({ mode: jdInputMode, text: jdText, file: jdFile })}
             onBack={() => goToStep(3)}
-            onNext={() => {
+            onComplete={(result) => {
+              setTalentResult(result)
               setMaxStepReached((prev) => Math.max(prev, 5))
               goToStep(5)
             }}
-            isProcessing={isAnalyzingJd}
-            error={jdError}
           />
         )}
 
@@ -369,30 +381,17 @@ export function MatchWizard({
           />
         )}
 
-        {currentStep === 6 && matchResult && (
-          <Step6TalentCheck
-            profile={editedProfile || originalProfile}
-            jdData={jdData}
-            onBack={() => goToStep(5)}
-            onComplete={(result) => {
-              setTalentResult(result)
-              setMaxStepReached((prev) => Math.max(prev, 7))
-              goToStep(7)
-            }}
-          />
-        )}
-
-        {currentStep === 7 && matchResult && talentResult && (
+        {currentStep === 6 && matchResult && talentResult && (
           <Step6Results
             matchResult={matchResult}
             profile={editedProfile || originalProfile}
             talentResult={talentResult}
             jdData={jdData}
-            stepNumber={7}
+            stepNumber={6}
             stackSkillColumns
             onStartNew={handleStartNewAnalysis}
-            onEditProfile={() => goToStep(2)}
-            onChangeJd={() => goToStep(3)}
+            onEditProfile={() => goToStep(3)}
+            onChangeJd={() => { setJdData(null); goToStep(1) }}
             onViewCompanyMatches={() => onNavigate('/company-matches')}
           />
         )}

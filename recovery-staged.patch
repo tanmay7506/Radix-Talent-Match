@@ -1,0 +1,2853 @@
+diff --git a/backend/AUTHENTICATION.md b/backend/AUTHENTICATION.md
+index b77edcd..edd6e9a 100644
+--- a/backend/AUTHENTICATION.md
++++ b/backend/AUTHENTICATION.md
+@@ -1,6 +1,6 @@
+ # Custom authentication configuration
+ 
+-Authentication is handled by FastAPI and the existing Supabase PostgREST API. The browser uses the API only; it must not use Supabase Auth or query `public.users`, `public.education`, or `public.refresh_tokens` directly.
++Authentication is handled by FastAPI and the existing Supabase PostgREST API. The browser uses the API only; it must not use Supabase Auth or query `public.users` or `public.education` directly.
+ 
+ Configure these variables in the backend environment (never in `VITE_*` variables):
+ 
+@@ -9,15 +9,13 @@ SUPABASE_URL=https://<project-ref>.supabase.co
+ SUPABASE_KEY=<existing-backend-service-role-key>
+ APP_AUTH_SECRET=<at-least-32-random-bytes>
+ APP_AUTH_ISSUER=radix-talent-match
+-APP_ACCESS_TOKEN_MINUTES=15
+-APP_REFRESH_TOKEN_DAYS=30
+-APP_COOKIE_SECURE=true
++APP_ACCESS_TOKEN_MINUTES=43200
+ ```
+ 
+ Generate the app secret locally with `python -c 'import secrets; print(secrets.token_urlsafe(48))'` and place it directly in the backend secret manager or local backend `.env`. Do not commit it or paste it into chat. FastAPI uses `SUPABASE_SERVICE_ROLE_KEY` for privileged PostgREST operations when set; otherwise it uses `SUPABASE_KEY`. Both must be backend-only keys with the required privileges. Keep `SUPABASE_KEY` available for existing data reads. Do not expose either server key or `APP_AUTH_SECRET` to Vite.
+ 
+-Apply the custom-auth SQL directly in the Supabase SQL Editor. It removes only the foreign keys and default that bind custom users and education records to Supabase Auth, then links education ownership to `public.users`; it also creates the refresh-token table and atomic rotation function. The backend derives every ownership predicate from the verified access JWT.
++Apply the custom-auth SQL directly in the Supabase SQL Editor. It removes only the foreign keys and default that bind custom users and education records to Supabase Auth, then links education ownership to `public.users`. The backend derives every ownership predicate from the verified access JWT.
+ 
+-Refresh tokens are random opaque values. The API stores only SHA-256 hashes in `public.refresh_tokens` and transports refresh tokens in an HttpOnly, SameSite=Lax cookie scoped to `/` so it works with both root and `/api` routes. Access tokens are short-lived JWTs returned by the API and should be held in memory by the client. Local development over plain HTTP may set `APP_COOKIE_SECURE=false`; production must use HTTPS and keep it `true`.
++Login returns a signed access JWT that the browser keeps as the active session in local storage. The default lifetime is 30 days (`APP_ACCESS_TOKEN_MINUTES=43200`); after expiry, the user signs in again. Logout clears the browser session. There is no refresh-token cookie or refresh-token database table requirement.
+ 
+-The `public.users` schema does not include extracted skills or arbitrary resume fields. The profile API persists only its existing columns and the related education row; adding persistence for additional candidate fields requires a separately reviewed schema change.
++Resume profile skills are stored as structured JSON in `public.users.skills`. Apply `migrations/20261029_add_user_skills.sql` in the Supabase SQL Editor before deploying the profile API changes. Education continues to be stored in the related `public.education` row; extracted education is saved when degree, college, graduation year, and CGPA are complete and valid.
+diff --git a/backend/auth.py b/backend/auth.py
+index 1d03baa..13e29da 100644
+--- a/backend/auth.py
++++ b/backend/auth.py
+@@ -2,22 +2,15 @@
+ 
+ from functions.talent_check.supabase_client import (
+     PASSWORD_HASHER,
+-    REFRESH_TOKEN_DAYS,
+     AuthenticatedUser,
+     LoginRequest,
+     ProfileUpdate,
+-    RefreshRequest,
+     RegisterRequest,
+     TokenResponse,
+     UserPublic,
+-    _hash_refresh_token,
+-    _new_refresh_token,
+     _public_user,
+-    clear_refresh_cookie,
+     create_access_token,
+     auth_rest_request,
+     get_current_user,
+-    get_refresh_token,
+     normalize_email,
+-    set_refresh_cookie,
+ )
+diff --git a/backend/functions/talent_check/supabase_client.py b/backend/functions/talent_check/supabase_client.py
+index 74c69b7..c9b30ce 100644
+--- a/backend/functions/talent_check/supabase_client.py
++++ b/backend/functions/talent_check/supabase_client.py
+@@ -11,9 +11,7 @@ Includes fallback to project data files for legacy test fixtures if requested.
+ import os
+ import json
+ import logging
+-import hashlib
+ import re
+-import secrets
+ from datetime import UTC, datetime, timedelta
+ from pathlib import Path
+ from typing import Any, Annotated
+@@ -21,6 +19,7 @@ from uuid import UUID
+ 
+ import jwt
+ import requests
++<<<<<<< HEAD
+ import dotenv
+ 
+ logger = logging.getLogger(__name__)
+@@ -38,6 +37,182 @@ DEFAULT_SUPABASE_KEY = os.environ.get(
+     "SUPABASE_KEY",
+     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3VmbG5iYW9pamNkdWRmeHdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0ODc0MzQsImV4cCI6MjEwODA2MzQzNH0.9AD11-CYeh0bXqNZWFYaxx7Q4o_vG1rgCHjDfERuAic",
+ )
++=======
++from argon2 import PasswordHasher
++from dotenv import load_dotenv
++from fastapi import Depends, HTTPException
++from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
++from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
++
++logger = logging.getLogger(__name__)
++
++# Authentication primitives live alongside the backend's Supabase data client.
++load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
++APP_AUTH_SECRET = os.getenv("APP_AUTH_SECRET", "")
++JWT_ISSUER = os.getenv("APP_AUTH_ISSUER", "radix-talent-match")
++ACCESS_TOKEN_MINUTES = int(os.getenv("APP_ACCESS_TOKEN_MINUTES", "43200"))
++JWT_ALGORITHM = "HS256"
++PASSWORD_HASHER = PasswordHasher()
++BEARER = HTTPBearer(auto_error=False)
++
++
++def _auth_supabase_config() -> tuple[str, str]:
++    url = os.getenv("SUPABASE_URL", "").strip() or DEFAULT_SUPABASE_URL
++    # Prefer the explicitly named service-role alias, while supporting existing
++    # deployments where SUPABASE_KEY is already the privileged server key.
++    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.getenv("SUPABASE_KEY", "").strip() or DEFAULT_SUPABASE_KEY
++    if not url or not key:
++        raise HTTPException(status_code=503, detail="Privileged authentication database access is not configured.")
++    return url.rstrip("/"), key
++
++
++def auth_rest_request(method: str, path: str, *, params: dict[str, str] | None = None, json_body: object | None = None, prefer: str | None = None) -> list[dict[str, Any]]:
++    url, key = _auth_supabase_config()
++    headers = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
++    if prefer:
++        headers["Prefer"] = prefer
++    try:
++        response = requests.request(method, f"{url}/rest/v1/{path}", headers=headers, params=params, json=json_body, timeout=10)
++    except requests.RequestException as exc:
++        logger.error("Auth PostgREST request %s %s failed (%s)", method, path, type(exc).__name__)
++        raise HTTPException(status_code=503, detail="Authentication data service is unavailable.") from exc
++    if response.status_code >= 400:
++        if response.status_code == 409:
++            raise HTTPException(status_code=409, detail="An account with this email already exists.")
++        try:
++            error_body = response.json()
++        except ValueError:
++            error_body = {}
++        if not isinstance(error_body, dict):
++            error_body = {}
++
++        def safe_diagnostic(value: object) -> str | None:
++            if value is None:
++                return None
++            diagnostic = str(value)[:500]
++            diagnostic = re.sub(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", "[redacted-email]", diagnostic, flags=re.IGNORECASE)
++            diagnostic = re.sub(r"\([^)]*\)=\([^)]*\)", "(value)=[redacted]", diagnostic)
++            diagnostic = re.sub(r"\b(?:eyJ[A-Za-z0-9_-]{20,}|[A-Za-z0-9_-]{40,})\b", "[redacted-token]", diagnostic)
++            return diagnostic
++
++        logger.error(
++            "Auth PostgREST request %s %s returned HTTP %s: code=%s message=%s details=%s hint=%s",
++            method,
++            path,
++            response.status_code,
++            safe_diagnostic(error_body.get("code")),
++            safe_diagnostic(error_body.get("message")),
++            safe_diagnostic(error_body.get("details")),
++            safe_diagnostic(error_body.get("hint")),
++        )
++        raise HTTPException(status_code=503, detail="Authentication data service is unavailable.")
++    if not response.content:
++        return []
++    data = response.json()
++    if not isinstance(data, list):
++        raise HTTPException(status_code=503, detail="Authentication data service returned an invalid response.")
++    return data
++
++
++def normalize_email(email: str) -> str:
++    return email.strip().lower()
++
++
++class UserPublic(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++    id: UUID
++    name: str
++    email: EmailStr
++    education_id: int | None = None
++    hackathons: list[str] = Field(default_factory=list)
++    internships: list[str] = Field(default_factory=list)
++    certifications: list[str] = Field(default_factory=list)
++    preferred_roles: list[str] = Field(default_factory=list)
++    created_at: datetime | None = None
++    updated_at: datetime | None = None
++
++
++class AuthenticatedUser(UserPublic):
++    pass
++
++
++class RegisterRequest(BaseModel):
++    name: str = Field(min_length=1, max_length=200)
++    email: EmailStr
++    password: str = Field(min_length=12, max_length=128)
++
++    @field_validator("name")
++    @classmethod
++    def clean_name(cls, value: str) -> str:
++        cleaned = value.strip()
++        if not cleaned:
++            raise ValueError("Name cannot be empty.")
++        return cleaned
++
++
++class LoginRequest(BaseModel):
++    email: EmailStr
++    password: str = Field(min_length=1, max_length=128)
++
++
++class TokenResponse(BaseModel):
++    user: UserPublic
++    access_token: str
++    token_type: str = "bearer"
++    expires_at: datetime
++
++
++class ProfileUpdate(BaseModel):
++    name: str | None = Field(default=None, min_length=1, max_length=200)
++    skills: list[dict[str, Any]] | None = None
++    hackathons: list[str] | None = None
++    internships: list[str] | None = None
++    certifications: list[str] | None = None
++    preferred_roles: list[str] | None = None
++    education: dict[str, str | int | float | None] | None = None
++
++
++def _auth_configured() -> None:
++    if not APP_AUTH_SECRET or len(APP_AUTH_SECRET.encode()) < 32:
++        raise HTTPException(status_code=503, detail="Authentication secret is not configured securely.")
++
++
++def create_access_token(user_id: UUID) -> tuple[str, datetime]:
++    _auth_configured()
++    now = datetime.now(UTC)
++    expires = now + timedelta(minutes=ACCESS_TOKEN_MINUTES)
++    token = jwt.encode({"sub": str(user_id), "iat": now, "exp": expires, "iss": JWT_ISSUER, "type": "access"}, APP_AUTH_SECRET, algorithm=JWT_ALGORITHM)
++    return token, expires
++
++
++def _decode_access_token(token: str) -> UUID:
++    _auth_configured()
++    try:
++        claims = jwt.decode(token, APP_AUTH_SECRET, algorithms=[JWT_ALGORITHM], issuer=JWT_ISSUER, options={"require": ["sub", "iat", "exp", "iss", "type"]})
++        if claims.get("type") != "access":
++            raise jwt.InvalidTokenError("Wrong token type")
++        return UUID(claims["sub"])
++    except (jwt.PyJWTError, ValueError, TypeError) as exc:
++        raise HTTPException(status_code=401, detail="Invalid or expired access token.", headers={"WWW-Authenticate": "Bearer"}) from exc
++
++
++def _public_user(row: dict[str, object]) -> UserPublic:
++    return UserPublic.model_validate({key: value for key, value in row.items() if key not in {"password", "token_hash"}})
++
++
++def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER)]) -> AuthenticatedUser:
++    if credentials is None or credentials.scheme.lower() != "bearer":
++        raise HTTPException(status_code=401, detail="Authentication required.", headers={"WWW-Authenticate": "Bearer"})
++    user_id = _decode_access_token(credentials.credentials)
++    rows = auth_rest_request("GET", "users", params={"select": "id,name,email,education_id,hackathons,internships,certifications,preferred_roles,created_at,updated_at", "id": f"eq.{user_id}", "limit": "1"})
++    if not rows:
++        raise HTTPException(status_code=401, detail="Invalid or expired access token.")
++    return AuthenticatedUser.model_validate(rows[0])
++
++# Fallback defaults for URL and Key if not in environment
++DEFAULT_SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
++DEFAULT_SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
++>>>>>>> 87d5be9 (new)
+ 
+ # In-memory caches to minimize repeated remote HTTP calls
+ _COMPANIES_CACHE: list[dict[str, Any]] | None = None
+diff --git a/backend/migrations/20261029_add_user_skills.sql b/backend/migrations/20261029_add_user_skills.sql
+new file mode 100644
+index 0000000..a950540
+--- /dev/null
++++ b/backend/migrations/20261029_add_user_skills.sql
+@@ -0,0 +1,4 @@
++-- Resume profile skills are stored as structured JSON so extraction metadata
++-- (level, confidence, evidence, and category) survives a profile save.
++ALTER TABLE public.users
++  ADD COLUMN IF NOT EXISTS skills jsonb NOT NULL DEFAULT '[]'::jsonb;
+diff --git a/backend/routers/auth.py b/backend/routers/auth.py
+index dc5fd9e..bdcd4a5 100644
+--- a/backend/routers/auth.py
++++ b/backend/routers/auth.py
+@@ -1,32 +1,24 @@
+ from __future__ import annotations
+ 
+-from datetime import UTC, datetime, timedelta
+ from typing import Annotated
+-from uuid import UUID, uuid4
++from uuid import uuid4
+ 
+ from argon2.exceptions import VerificationError, VerifyMismatchError
+-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
++from fastapi import APIRouter, Depends, HTTPException, status
+ 
+ from auth import (
+     PASSWORD_HASHER,
+-    REFRESH_TOKEN_DAYS,
+     AuthenticatedUser,
+     LoginRequest,
+     ProfileUpdate,
+-    RefreshRequest,
+     RegisterRequest,
+     TokenResponse,
+     UserPublic,
+     auth_rest_request,
+-    _hash_refresh_token,
+-    _new_refresh_token,
+     _public_user,
+-    clear_refresh_cookie,
+     create_access_token,
+     get_current_user,
+-    get_refresh_token,
+     normalize_email,
+-    set_refresh_cookie,
+ )
+ 
+ router = APIRouter(prefix="/auth", tags=["authentication"])
+@@ -36,29 +28,25 @@ profiles_router = APIRouter(prefix="/profiles", tags=["profile"])
+ _DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash("not-a-real-user-password")
+ 
+ 
+-def _issue_session(user: UserPublic, response: Response) -> TokenResponse:
+-    refresh_token = _new_refresh_token()
+-    refresh_expiry = datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_DAYS)
+-    auth_rest_request("POST", "refresh_tokens", params={"select": "id"}, json_body={"user_id": str(user.id), "token_hash": _hash_refresh_token(refresh_token), "expires_at": refresh_expiry.isoformat()}, prefer="return=minimal")
++def _issue_session(user: UserPublic) -> TokenResponse:
+     access_token, access_expiry = create_access_token(user.id)
+-    set_refresh_cookie(response, refresh_token)
+     return TokenResponse(user=user, access_token=access_token, expires_at=access_expiry)
+ 
+ 
+ @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+ @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+-def register(payload: RegisterRequest, response: Response) -> TokenResponse:
++def register(payload: RegisterRequest) -> TokenResponse:
+     email = normalize_email(str(payload.email))
+     user_id = uuid4()
+     password = PASSWORD_HASHER.hash(payload.password)
+     rows = auth_rest_request("POST", "users", params={"select": "id,name,email,education_id,hackathons,internships,certifications,preferred_roles,created_at,updated_at"}, json_body={"id": str(user_id), "name": payload.name, "email": email, "password": password}, prefer="return=representation")
+     if not rows:
+         raise HTTPException(status_code=503, detail="Authentication data service returned no user.")
+-    return _issue_session(_public_user(rows[0]), response)
++    return _issue_session(_public_user(rows[0]))
+ 
+ 
+ @router.post("/login", response_model=TokenResponse)
+-def login(payload: LoginRequest, response: Response) -> TokenResponse:
++def login(payload: LoginRequest) -> TokenResponse:
+     email = normalize_email(str(payload.email))
+     rows = auth_rest_request("GET", "users", params={"select": "id,name,email,password,education_id,hackathons,internships,certifications,preferred_roles,created_at,updated_at", "email": f"eq.{email}", "limit": "1"})
+     row = rows[0] if rows else None
+@@ -76,37 +64,7 @@ def login(payload: LoginRequest, response: Response) -> TokenResponse:
+     if not row or not valid_password:
+         raise HTTPException(status_code=401, detail="Invalid email or password.")
+     user = _public_user(row)
+-    return _issue_session(user, response)
+-
+-
+-@router.post("/refresh", response_model=TokenResponse)
+-def refresh(request: Request, response: Response, payload: RefreshRequest | None = None) -> TokenResponse:
+-    old_token = get_refresh_token(request, payload)
+-    if not old_token:
+-        raise HTTPException(status_code=401, detail="Refresh token is required.")
+-    old_hash = _hash_refresh_token(old_token)
+-    new_token = _new_refresh_token()
+-    now = datetime.now(UTC)
+-    expires_at = now + timedelta(days=REFRESH_TOKEN_DAYS)
+-    rows = auth_rest_request("POST", "rpc/rotate_refresh_token", json_body={"p_old_token_hash": old_hash, "p_new_token_hash": _hash_refresh_token(new_token), "p_expires_at": expires_at.isoformat(), "p_now": now.isoformat()})
+-    result = rows[0] if rows else None
+-    if not result or not result.get("user_data"):
+-        clear_refresh_cookie(response)
+-        raise HTTPException(status_code=401, detail="Refresh token is invalid, expired, or already used.")
+-    user_row = result["user_data"]
+-    access_token, access_expiry = create_access_token(UUID(str(user_row["id"])))
+-    set_refresh_cookie(response, new_token)
+-    return TokenResponse(user=_public_user(user_row), access_token=access_token, expires_at=access_expiry)
+-
+-
+-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+-def logout(request: Request, response: Response, payload: RefreshRequest | None = None) -> Response:
+-    token = get_refresh_token(request, payload)
+-    if token:
+-        auth_rest_request("PATCH", "refresh_tokens", params={"token_hash": f"eq.{_hash_refresh_token(token)}", "revoked_at": "is.null"}, json_body={"revoked_at": datetime.now(UTC).isoformat()}, prefer="return=minimal")
+-    clear_refresh_cookie(response)
+-    response.status_code = status.HTTP_204_NO_CONTENT
+-    return response
++    return _issue_session(user)
+ 
+ 
+ @router.get("/me", response_model=UserPublic)
+@@ -114,15 +72,9 @@ def me(user: Annotated[AuthenticatedUser, Depends(get_current_user)]) -> Authent
+     return user
+ 
+ 
+-@router.get("/session", response_model=TokenResponse, include_in_schema=False)
+-def session(request: Request, response: Response) -> TokenResponse:
+-    # Restores a page-reloaded client session by rotating the HttpOnly cookie token.
+-    return refresh(request, response)
+-
+-
+ @profiles_router.get("/me")
+ def get_profile(user: Annotated[AuthenticatedUser, Depends(get_current_user)]) -> dict[str, object]:
+-    users = auth_rest_request("GET", "users", params={"select": "id,name,email,hackathons,internships,certifications,preferred_roles,education_id", "id": f"eq.{user.id}", "limit": "1"})
++    users = auth_rest_request("GET", "users", params={"select": "id,name,email,skills,hackathons,internships,certifications,preferred_roles,education_id", "id": f"eq.{user.id}", "limit": "1"})
+     if not users:
+         raise HTTPException(status_code=404, detail="Profile not found.")
+     row = users[0]
+@@ -131,13 +83,13 @@ def get_profile(user: Annotated[AuthenticatedUser, Depends(get_current_user)]) -
+         records = auth_rest_request("GET", "education", params={"select": "degree,college,graduation_year,cgpa", "id": f"eq.{row['education_id']}", "owner_id": f"eq.{user.id}", "limit": "1"})
+         if records:
+             education = {"degree": records[0]["degree"], "college": records[0]["college"], "graduation_year": records[0]["graduation_year"], "cgpa": records[0]["cgpa"]}
+-    return {"id": str(row["id"]), "name": row["name"], "email": row["email"], "hackathons": row["hackathons"], "internships": row["internships"], "certifications": row["certifications"], "preferred_roles": row["preferred_roles"], "education": education}
++    return {"id": str(row["id"]), "name": row["name"], "email": row["email"], "skills": row.get("skills") or [], "hackathons": row["hackathons"], "internships": row["internships"], "certifications": row["certifications"], "preferred_roles": row["preferred_roles"], "education": education}
+ 
+ 
+ @profiles_router.put("/me")
+ def update_profile(payload: ProfileUpdate, user: Annotated[AuthenticatedUser, Depends(get_current_user)]) -> dict[str, object]:
+     changes = payload.model_dump(exclude_unset=True)
+-    allowed_fields = {"name", "hackathons", "internships", "certifications", "preferred_roles"}
++    allowed_fields = {"name", "skills", "hackathons", "internships", "certifications", "preferred_roles"}
+     user_changes = {field: changes[field] for field in allowed_fields if field in changes}
+     if user_changes:
+         auth_rest_request("PATCH", "users", params={"id": f"eq.{user.id}"}, json_body=user_changes, prefer="return=minimal")
+diff --git a/backend/tests/test_custom_auth.py b/backend/tests/test_custom_auth.py
+index 4765f66..a0f6fae 100644
+--- a/backend/tests/test_custom_auth.py
++++ b/backend/tests/test_custom_auth.py
+@@ -7,11 +7,10 @@ from uuid import uuid4
+ from argon2 import PasswordHasher
+ from fastapi import HTTPException, Response
+ from fastapi.security import HTTPAuthorizationCredentials
+-from starlette.requests import Request
+ 
+ from routers import auth as auth_router
+ from functions.talent_check import supabase_client
+-from functions.talent_check.supabase_client import LoginRequest, RefreshRequest, RegisterRequest
++from functions.talent_check.supabase_client import LoginRequest, RegisterRequest
+ 
+ 
+ class CustomAuthTests(unittest.TestCase):
+@@ -91,46 +90,6 @@ class CustomAuthTests(unittest.TestCase):
+         self.assertIn("password", rest_request.call_args.kwargs["params"]["select"])
+         issue_session.assert_called_once()
+ 
+-    def test_logout_revokes_hashed_refresh_token_and_clears_cookie(self):
+-        request = Request({
+-            "type": "http", "method": "POST", "path": "/auth/logout", "headers": [],
+-            "query_string": b"", "server": ("test", 80), "client": ("test", 1), "scheme": "http",
+-        })
+-        response = Response()
+-        refresh_token = "r" * 48
+-
+-        with patch.object(auth_router, "auth_rest_request") as rest_request:
+-            result = auth_router.logout(request, response, RefreshRequest(refresh_token=refresh_token))
+-
+-        self.assertEqual(result.status_code, 204)
+-        self.assertEqual(rest_request.call_args.args, ("PATCH", "refresh_tokens"))
+-        self.assertEqual(
+-            rest_request.call_args.kwargs["params"]["token_hash"],
+-            f"eq.{auth_router._hash_refresh_token(refresh_token)}",
+-        )
+-        self.assertIn("radix_refresh=", response.headers["set-cookie"])
+-
+-    def test_refresh_uses_atomic_rpc_and_sets_rotated_cookie(self):
+-        user_row = {
+-            "id": str(uuid4()), "name": "Test User", "email": "test@example.com",
+-            "hackathons": [], "internships": [], "certifications": [], "preferred_roles": [],
+-        }
+-        request = Request({
+-            "type": "http", "method": "POST", "path": "/auth/refresh", "headers": [],
+-            "query_string": b"", "server": ("test", 80), "client": ("test", 1), "scheme": "http",
+-        })
+-        response = Response()
+-
+-        with (
+-            patch.object(auth_router, "auth_rest_request", return_value=[{"user_data": user_row}]) as rest_request,
+-            patch.object(auth_router, "create_access_token", return_value=("access-token", datetime.now(UTC))),
+-        ):
+-            result = auth_router.refresh(request, response, RefreshRequest(refresh_token="r" * 48))
+-
+-        self.assertEqual(result.access_token, "access-token")
+-        self.assertEqual(rest_request.call_args.args, ("POST", "rpc/rotate_refresh_token"))
+-        self.assertIn("radix_refresh=", response.headers["set-cookie"])
+-
+     def test_current_user_uses_custom_jwt_subject_for_user_lookup(self):
+         user_id = uuid4()
+         row = {"id": str(user_id), "name": "Test User", "email": "test@example.com"}
+diff --git a/frontend/package-lock.json b/frontend/package-lock.json
+index 18371f7..839abe2 100644
+--- a/frontend/package-lock.json
++++ b/frontend/package-lock.json
+@@ -13,6 +13,7 @@
+         "lucide-react": "^1.61.0",
+         "react": "^19.3.1",
+         "react-dom": "^19.3.1",
++        "react-markdown": "^10.1.0",
+         "recharts": "^3.10.1"
+       },
+       "devDependencies": {
+@@ -1126,11 +1127,58 @@
+       "integrity": "sha512-Ps3T8E8dZDam6fUyNiMkekK3XUsaUEik+idO9/YjPtfj2qruF8tFBXS7XhtE4iIXBLxhmLjP3SXpLhVf21I9Lw==",
+       "license": "MIT"
+     },
++    "node_modules/@types/debug": {
++      "version": "4.1.13",
++      "resolved": "https://registry.npmjs.org/@types/debug/-/debug-4.1.13.tgz",
++      "integrity": "sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/ms": "*"
++      }
++    },
++    "node_modules/@types/estree": {
++      "version": "1.0.10",
++      "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.10.tgz",
++      "integrity": "sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==",
++      "license": "MIT"
++    },
++    "node_modules/@types/estree-jsx": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/@types/estree-jsx/-/estree-jsx-1.0.5.tgz",
++      "integrity": "sha512-52CcUVNFyfb1A2ALocQw/Dd1BQFNmSdkuC3BkZ6iqhdMfQz7JWOFRuJFloOzjk+6WijU56m9oKXFAXc7o3Towg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree": "*"
++      }
++    },
++    "node_modules/@types/hast": {
++      "version": "3.0.5",
++      "resolved": "https://registry.npmjs.org/@types/hast/-/hast-3.0.5.tgz",
++      "integrity": "sha512-rp/ezSWaD1m44dPKICGhiskI13nVr7qTloFwDa/IYkhhf5nzwP+zIQcIJh3WIFSBOy/H1PzB40jPjMDksN4F+g==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "*"
++      }
++    },
++    "node_modules/@types/mdast": {
++      "version": "4.0.4",
++      "resolved": "https://registry.npmjs.org/@types/mdast/-/mdast-4.0.4.tgz",
++      "integrity": "sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "*"
++      }
++    },
++    "node_modules/@types/ms": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz",
++      "integrity": "sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==",
++      "license": "MIT"
++    },
+     "node_modules/@types/react": {
+       "version": "19.3.0",
+       "resolved": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz",
+       "integrity": "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==",
+-      "devOptional": true,
+       "license": "MIT",
+       "dependencies": {
+         "csstype": "^3.2.2"
+@@ -1146,12 +1194,24 @@
+         "@types/react": "^19.3.0"
+       }
+     },
++    "node_modules/@types/unist": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/@types/unist/-/unist-3.0.3.tgz",
++      "integrity": "sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==",
++      "license": "MIT"
++    },
+     "node_modules/@types/use-sync-external-store": {
+       "version": "0.0.6",
+       "resolved": "https://registry.npmjs.org/@types/use-sync-external-store/-/use-sync-external-store-0.0.6.tgz",
+       "integrity": "sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==",
+       "license": "MIT"
+     },
++    "node_modules/@ungap/structured-clone": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/@ungap/structured-clone/-/structured-clone-1.4.0.tgz",
++      "integrity": "sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ==",
++      "license": "ISC"
++    },
+     "node_modules/@vitejs/plugin-react": {
+       "version": "6.1.2",
+       "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-6.1.2.tgz",
+@@ -1192,6 +1252,16 @@
+         "@babel/types": "^7.26.0"
+       }
+     },
++    "node_modules/bail": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/bail/-/bail-2.0.2.tgz",
++      "integrity": "sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/baseline-browser-mapping": {
+       "version": "2.11.32",
+       "resolved": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.11.32.tgz",
+@@ -1260,6 +1330,56 @@
+       ],
+       "license": "CC-BY-4.0"
+     },
++    "node_modules/ccount": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/ccount/-/ccount-2.0.1.tgz",
++      "integrity": "sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-entities": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/character-entities/-/character-entities-2.0.2.tgz",
++      "integrity": "sha512-shx7oQ0Awen/BRIdkjkvz54PnEEI/EjwXDSIZp86/KKdbafHh1Df/RYGBhn4hbe2+uKC9FnT5UCEdyPz3ai9hQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-entities-html4": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/character-entities-html4/-/character-entities-html4-2.1.0.tgz",
++      "integrity": "sha512-1v7fgQRj6hnSwFpq1Eu0ynr/CDEw0rXo2B61qXrLNdHZmPKgb7fqS1a2JwF0rISo9q77jDI8VMEHoApn8qDoZA==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-entities-legacy": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/character-entities-legacy/-/character-entities-legacy-3.0.0.tgz",
++      "integrity": "sha512-RpPp0asT/6ufRm//AJVwpViZbGM/MkjQFxJccQRHmISF/22NBtsHqAWmL+/pmkPWoIUJdWyeVleTl1wydHATVQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-reference-invalid": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/character-reference-invalid/-/character-reference-invalid-2.0.1.tgz",
++      "integrity": "sha512-iBZ4F4wRbyORVsu0jPV7gXkOsGYjGHPmAyv+HiHG8gi5PtC9KI2j1+v8/tlibRvjoWX027ypmG/n0HtO5t7unw==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/clsx": {
+       "version": "2.1.1",
+       "resolved": "https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz",
+@@ -1269,6 +1389,16 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/comma-separated-tokens": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/comma-separated-tokens/-/comma-separated-tokens-2.0.3.tgz",
++      "integrity": "sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/convert-source-map": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz",
+@@ -1286,7 +1416,6 @@
+       "version": "3.2.3",
+       "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+       "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+-      "devOptional": true,
+       "license": "MIT"
+     },
+     "node_modules/d3-array": {
+@@ -1414,7 +1543,6 @@
+       "version": "4.4.3",
+       "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+       "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+-      "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "ms": "^2.1.3"
+@@ -1434,6 +1562,28 @@
+       "integrity": "sha512-qIMFpTMZmny+MMIitAB6D7iVPEorVw6YQRWkvarTkT4tBeSLLiHzcwj6q0MmYSFCiVpiqPJTJEYIrpcPzVEIvg==",
+       "license": "MIT"
+     },
++    "node_modules/decode-named-character-reference": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/decode-named-character-reference/-/decode-named-character-reference-1.3.0.tgz",
++      "integrity": "sha512-GtpQYB283KrPp6nRw50q3U9/VfOutZOe103qlN7BPP6Ad27xYnOIWv4lPzo8HCAL+mMZofJ9KEy30fq6MfaK6Q==",
++      "license": "MIT",
++      "dependencies": {
++        "character-entities": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/dequal": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz",
++      "integrity": "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=6"
++      }
++    },
+     "node_modules/detect-libc": {
+       "version": "2.1.2",
+       "resolved": "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz",
+@@ -1444,6 +1594,19 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/devlop": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/devlop/-/devlop-1.1.0.tgz",
++      "integrity": "sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==",
++      "license": "MIT",
++      "dependencies": {
++        "dequal": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/electron-to-chromium": {
+       "version": "1.5.464",
+       "resolved": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.464.tgz",
+@@ -1473,12 +1636,28 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/estree-util-is-identifier-name": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/estree-util-is-identifier-name/-/estree-util-is-identifier-name-3.0.0.tgz",
++      "integrity": "sha512-hFtqIDZTIUZ9BXLb8y4pYGyk6+wekIivNVTcmvk8NoOh+VeRn5y6cEHzbURrWbfp1fIqdVipilzj+lfaadNZmg==",
++      "license": "MIT",
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/eventemitter3": {
+       "version": "5.0.4",
+       "resolved": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-5.0.4.tgz",
+       "integrity": "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==",
+       "license": "MIT"
+     },
++    "node_modules/extend": {
++      "version": "3.0.2",
++      "resolved": "https://registry.npmjs.org/extend/-/extend-3.0.2.tgz",
++      "integrity": "sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==",
++      "license": "MIT"
++    },
+     "node_modules/fdir": {
+       "version": "6.5.0",
+       "resolved": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz",
+@@ -1528,6 +1707,56 @@
+       "integrity": "sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==",
+       "license": "Standard 'no charge' license: https://gsap.com/standard-license."
+     },
++    "node_modules/hast-util-to-jsx-runtime": {
++      "version": "2.3.6",
++      "resolved": "https://registry.npmjs.org/hast-util-to-jsx-runtime/-/hast-util-to-jsx-runtime-2.3.6.tgz",
++      "integrity": "sha512-zl6s8LwNyo1P9uw+XJGvZtdFF1GdAkOg8ujOw+4Pyb76874fLps4ueHXDhXWdk6YHQ6OgUtinliG7RsYvCbbBg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/unist": "^3.0.0",
++        "comma-separated-tokens": "^2.0.0",
++        "devlop": "^1.0.0",
++        "estree-util-is-identifier-name": "^3.0.0",
++        "hast-util-whitespace": "^3.0.0",
++        "mdast-util-mdx-expression": "^2.0.0",
++        "mdast-util-mdx-jsx": "^3.0.0",
++        "mdast-util-mdxjs-esm": "^2.0.0",
++        "property-information": "^7.0.0",
++        "space-separated-tokens": "^2.0.0",
++        "style-to-js": "^1.0.0",
++        "unist-util-position": "^5.0.0",
++        "vfile-message": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/hast-util-whitespace": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/hast-util-whitespace/-/hast-util-whitespace-3.0.0.tgz",
++      "integrity": "sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/html-url-attributes": {
++      "version": "3.0.1",
++      "resolved": "https://registry.npmjs.org/html-url-attributes/-/html-url-attributes-3.0.1.tgz",
++      "integrity": "sha512-ol6UPyBWqsrO6EJySPz2O7ZSr856WDrEzM5zMqp+FJJLGMW35cLYmmZnl0vztAZxRUoNZJFTCohfjuIJ8I4QBQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/immer": {
+       "version": "11.2.9",
+       "resolved": "https://registry.npmjs.org/immer/-/immer-11.2.9.tgz",
+@@ -1538,6 +1767,12 @@
+         "url": "https://opencollective.com/immer"
+       }
+     },
++    "node_modules/inline-style-parser": {
++      "version": "0.2.7",
++      "resolved": "https://registry.npmjs.org/inline-style-parser/-/inline-style-parser-0.2.7.tgz",
++      "integrity": "sha512-Nb2ctOyNR8DqQoR0OwRG95uNWIC0C1lCgf5Naz5H6Ji72KZ8OcFZLz2P5sNgwlyoJ8Yif11oMuYs5pBQa86csA==",
++      "license": "MIT"
++    },
+     "node_modules/internmap": {
+       "version": "2.0.3",
+       "resolved": "https://registry.npmjs.org/internmap/-/internmap-2.0.3.tgz",
+@@ -1547,6 +1782,62 @@
+         "node": ">=12"
+       }
+     },
++    "node_modules/is-alphabetical": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-alphabetical/-/is-alphabetical-2.0.1.tgz",
++      "integrity": "sha512-FWyyY60MeTNyeSRpkM2Iry0G9hpr7/9kD40mD/cGQEuilcZYS4okz8SN2Q6rLCJ8gbCt6fN+rC+6tMGS99LaxQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-alphanumerical": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-alphanumerical/-/is-alphanumerical-2.0.1.tgz",
++      "integrity": "sha512-hmbYhX/9MUMF5uh7tOXyK/n0ZvWpad5caBA17GsC6vyuCqaWliRG5K1qS9inmUhEMaOBIW7/whAnSwveW/LtZw==",
++      "license": "MIT",
++      "dependencies": {
++        "is-alphabetical": "^2.0.0",
++        "is-decimal": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-decimal": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-decimal/-/is-decimal-2.0.1.tgz",
++      "integrity": "sha512-AAB9hiomQs5DXWcRB1rqsxGUstbRroFOPPVAomNk/3XHR5JyEZChOyTWe2oayKnsSsr/kcGqF+z6yuH6HHpN0A==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-hexadecimal": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-hexadecimal/-/is-hexadecimal-2.0.1.tgz",
++      "integrity": "sha512-DgZQp241c8oO6cA1SbTEWiXeoxV42vlcJxgH+B3hi1AiqqKruZR3ZGF8In3fj4+/y/7rHvlOZLZtgJ/4ttYGZg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-plain-obj": {
++      "version": "4.1.0",
++      "resolved": "https://registry.npmjs.org/is-plain-obj/-/is-plain-obj-4.1.0.tgz",
++      "integrity": "sha512-+Pgi+vMuUNkJyExiMBt5IlFoMyKnr5zhJ4Uspz58WOhBF5QoIZkFyNHIbBAtHwzVAgk5RtndVNsDRN61/mmDqg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=12"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/sindresorhus"
++      }
++    },
+     "node_modules/isbot": {
+       "version": "5.2.2",
+       "resolved": "https://registry.npmjs.org/isbot/-/isbot-5.2.2.tgz",
+@@ -1850,6 +2141,16 @@
+         "url": "https://opencollective.com/parcel"
+       }
+     },
++    "node_modules/longest-streak": {
++      "version": "3.1.0",
++      "resolved": "https://registry.npmjs.org/longest-streak/-/longest-streak-3.1.0.tgz",
++      "integrity": "sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/lru-cache": {
+       "version": "5.1.1",
+       "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
+@@ -1875,113 +2176,755 @@
+         }
+       }
+     },
+-    "node_modules/ms": {
+-      "version": "2.1.3",
+-      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+-      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+-      "dev": true,
+-      "license": "MIT"
+-    },
+-    "node_modules/nanoid": {
+-      "version": "3.3.20",
+-      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.20.tgz",
+-      "integrity": "sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==",
+-      "dev": true,
+-      "funding": [
+-        {
+-          "type": "github",
+-          "url": "https://github.com/sponsors/ai"
+-        }
+-      ],
++    "node_modules/mdast-util-from-markdown": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-from-markdown/-/mdast-util-from-markdown-2.1.0.tgz",
++      "integrity": "sha512-KRLgmPaP2H1ul2bpoJkOS+9pAcDAAj9Nu1mqLnh8NLeJG5tlvj42TH80PIGBpROWlRXLk0lDrWNuZCFy/tsB4A==",
+       "license": "MIT",
+-      "bin": {
+-        "nanoid": "bin/nanoid.cjs"
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "@types/unist": "^3.0.0",
++        "decode-named-character-reference": "^1.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-to-string": "^4.0.0",
++        "micromark": "^4.0.0",
++        "micromark-util-decode-numeric-character-reference": "^2.0.0",
++        "micromark-util-decode-string": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0",
++        "unist-util-stringify-position": "^4.0.0"
+       },
+-      "engines": {
+-        "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
+       }
+     },
+-    "node_modules/node-releases": {
+-      "version": "2.0.60",
+-      "resolved": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.60.tgz",
+-      "integrity": "sha512-OmO8+GM1JUZqXET720VrJCwkjUCXmCMQm0Z3UDDRbfNLHS4NEAvY60j5jiFv0tkKw2PNNlqOLhahVmwJIOLDIQ==",
+-      "dev": true,
++    "node_modules/mdast-util-mdx-expression": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-mdx-expression/-/mdast-util-mdx-expression-2.0.1.tgz",
++      "integrity": "sha512-J6f+9hUp+ldTZqKRSg7Vw5V6MqjATc+3E4gf3CFNcuZNWD8XdyI6zQ8GqH7f8169MM6P7hMBRDVGnn7oHB9kXQ==",
+       "license": "MIT",
+-      "engines": {
+-        "node": ">=18"
++      "dependencies": {
++        "@types/estree-jsx": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
+       }
+     },
+-    "node_modules/oxlint": {
+-      "version": "1.89.0",
+-      "resolved": "https://registry.npmjs.org/oxlint/-/oxlint-1.89.0.tgz",
+-      "integrity": "sha512-a25hkfo61okGPvJz432fRIPoxlKtNnOVy9w4rzrmGgNm4iVTPwpSQlmdqNWnp6p9QyyPVfAZRgnf5XvSBZFk/A==",
+-      "dev": true,
++    "node_modules/mdast-util-mdx-jsx": {
++      "version": "3.2.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-mdx-jsx/-/mdast-util-mdx-jsx-3.2.0.tgz",
++      "integrity": "sha512-lj/z8v0r6ZtsN/cGNNtemmmfoLAFZnjMbNyLzBafjzikOM+glrjNHPlf6lQDOTccj9n5b0PPihEBbhneMyGs1Q==",
+       "license": "MIT",
+-      "bin": {
+-        "oxlint": "bin/oxlint"
+-      },
+-      "engines": {
+-        "node": "^20.19.0 || >=22.12.0"
++      "dependencies": {
++        "@types/estree-jsx": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "@types/unist": "^3.0.0",
++        "ccount": "^2.0.0",
++        "devlop": "^1.1.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0",
++        "parse-entities": "^4.0.0",
++        "stringify-entities": "^4.0.0",
++        "unist-util-stringify-position": "^4.0.0",
++        "vfile-message": "^4.0.0"
+       },
+       "funding": {
+-        "url": "https://github.com/sponsors/oxc-project"
+-      },
+-      "optionalDependencies": {
+-        "@oxlint/binding-android-arm-eabi": "1.89.0",
+-        "@oxlint/binding-android-arm64": "1.89.0",
+-        "@oxlint/binding-darwin-arm64": "1.89.0",
+-        "@oxlint/binding-darwin-x64": "1.89.0",
+-        "@oxlint/binding-freebsd-x64": "1.89.0",
+-        "@oxlint/binding-linux-arm-gnueabihf": "1.89.0",
+-        "@oxlint/binding-linux-arm-musleabihf": "1.89.0",
+-        "@oxlint/binding-linux-arm64-gnu": "1.89.0",
+-        "@oxlint/binding-linux-arm64-musl": "1.89.0",
+-        "@oxlint/binding-linux-ppc64-gnu": "1.89.0",
+-        "@oxlint/binding-linux-riscv64-gnu": "1.89.0",
+-        "@oxlint/binding-linux-riscv64-musl": "1.89.0",
+-        "@oxlint/binding-linux-s390x-gnu": "1.89.0",
+-        "@oxlint/binding-linux-x64-gnu": "1.89.0",
+-        "@oxlint/binding-linux-x64-musl": "1.89.0",
+-        "@oxlint/binding-openharmony-arm64": "1.89.0",
+-        "@oxlint/binding-win32-arm64-msvc": "1.89.0",
+-        "@oxlint/binding-win32-ia32-msvc": "1.89.0",
+-        "@oxlint/binding-win32-x64-msvc": "1.89.0"
+-      },
+-      "peerDependencies": {
+-        "oxlint-tsgolint": ">=7.0.2003",
+-        "vite-plus": "*"
+-      },
+-      "peerDependenciesMeta": {
+-        "oxlint-tsgolint": {
+-          "optional": true
+-        },
+-        "vite-plus": {
+-          "optional": true
+-        }
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
+       }
+     },
+-    "node_modules/picocolors": {
+-      "version": "1.1.1",
+-      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+-      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+-      "dev": true,
+-      "license": "ISC"
++    "node_modules/mdast-util-mdxjs-esm": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-mdxjs-esm/-/mdast-util-mdxjs-esm-2.0.1.tgz",
++      "integrity": "sha512-EcmOpxsZ96CvlP03NghtH1EsLtr0n9Tm4lPUJUBccV9RwUOneqSycg19n5HGzCf+10LozMRSObtVr3ee1WoHtg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree-jsx": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
+     },
+-    "node_modules/picomatch": {
+-      "version": "4.0.7",
+-      "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz",
+-      "integrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
+-      "dev": true,
++    "node_modules/mdast-util-phrasing": {
++      "version": "4.1.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-phrasing/-/mdast-util-phrasing-4.1.0.tgz",
++      "integrity": "sha512-TqICwyvJJpBwvGAMZjj4J2n0X8QWp21b9l0o7eXyVJ25YNWYbJDVIyD1bZXE6WtV6RmKJVYmQAKWa0zWOABz2w==",
+       "license": "MIT",
+-      "engines": {
+-        "node": ">=12"
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "unist-util-is": "^6.0.0"
+       },
+       "funding": {
+-        "url": "https://github.com/sponsors/jonschlinkert"
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
+       }
+     },
+-    "node_modules/postcss": {
+-      "version": "8.5.31",
++    "node_modules/mdast-util-to-hast": {
++      "version": "13.2.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-to-hast/-/mdast-util-to-hast-13.2.1.tgz",
++      "integrity": "sha512-cctsq2wp5vTsLIcaymblUriiTcZd0CwWtCbLvrOzYCDZoWyMNV8sZ7krj09FSnsiJi3WVsHLM4k6Dq/yaPyCXA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "@ungap/structured-clone": "^1.0.0",
++        "devlop": "^1.0.0",
++        "micromark-util-sanitize-uri": "^2.0.0",
++        "trim-lines": "^3.0.0",
++        "unist-util-position": "^5.0.0",
++        "unist-util-visit": "^5.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-to-markdown": {
++      "version": "2.2.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-to-markdown/-/mdast-util-to-markdown-2.2.1.tgz",
++      "integrity": "sha512-ThatlCBxG2GE+mljhNSfZPv56d3QrGiRh97jjYgIk80IzS4uU6d7cHAaexCYSAmUCCcOs3grJ07kX3oTGsFUOw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "@types/unist": "^3.0.0",
++        "longest-streak": "^3.0.0",
++        "mdast-util-phrasing": "^4.0.0",
++        "mdast-util-to-string": "^4.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-classify-character": "^2.0.0",
++        "micromark-util-decode-string": "^2.0.0",
++        "micromark-util-html-tag-name": "^2.0.0",
++        "unist-util-visit": "^5.0.0",
++        "zwitch": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-to-string": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-to-string/-/mdast-util-to-string-4.0.0.tgz",
++      "integrity": "sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark": {
++      "version": "4.0.3",
++      "resolved": "https://registry.npmjs.org/micromark/-/micromark-4.0.3.tgz",
++      "integrity": "sha512-oGYfQzHSG5dOMovQcJ3fyTmZlWAWpi0XA0sJwJs+i6OT88o1+Jtw/8z0CmdowSLxGhhFK89rQ/oXph/wN02PNw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "@types/debug": "^4.0.0",
++        "debug": "^4.0.0",
++        "decode-named-character-reference": "^1.0.0",
++        "devlop": "^1.0.0",
++        "micromark-core-commonmark": "^2.0.0",
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-combine-extensions": "^2.0.0",
++        "micromark-util-decode-numeric-character-reference": "^2.0.0",
++        "micromark-util-edit-map": "^1.0.0",
++        "micromark-util-encode": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0",
++        "micromark-util-resolve-all": "^2.0.0",
++        "micromark-util-sanitize-uri": "^2.0.0",
++        "micromark-util-subtokenize": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-core-commonmark": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/micromark-core-commonmark/-/micromark-core-commonmark-2.0.4.tgz",
++      "integrity": "sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "decode-named-character-reference": "^1.0.0",
++        "devlop": "^1.0.0",
++        "micromark-factory-destination": "^2.0.0",
++        "micromark-factory-label": "^2.0.0",
++        "micromark-factory-space": "^2.1.0",
++        "micromark-factory-title": "^2.0.0",
++        "micromark-factory-whitespace": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-classify-character": "^2.0.0",
++        "micromark-util-edit-map": "^1.0.0",
++        "micromark-util-html-tag-name": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0",
++        "micromark-util-resolve-all": "^2.0.0",
++        "micromark-util-subtokenize": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.3"
++      }
++    },
++    "node_modules/micromark-factory-destination": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-destination/-/micromark-factory-destination-2.0.1.tgz",
++      "integrity": "sha512-Xe6rDdJlkmbFRExpTOmRj9N3MaWmbAgdpSrBQvCFqhezUn4AHqJHbaEnfbVYYiexVSs//tqOdY/DxhjdCiJnIA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-label": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-label/-/micromark-factory-label-2.0.1.tgz",
++      "integrity": "sha512-VFMekyQExqIW7xIChcXn4ok29YE3rnuyveW3wZQWWqF4Nv9Wk5rgJ99KzPvHjkmPXF93FXIbBp6YdW3t71/7Vg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-space": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-factory-space/-/micromark-factory-space-2.1.0.tgz",
++      "integrity": "sha512-fS8hnLIjnjvdQIj39Geug8wWsR0HrYZ43KShKxNfwT7t2LOHo/LbWZEzEaSOjwtjdCsjoE6syHhonEzW0zv0+Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-title": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-title/-/micromark-factory-title-2.0.1.tgz",
++      "integrity": "sha512-5bZ+3CjhAd9eChYTHsjy6TGxpOFSKgKKJPJxr293jTbfry2KDoWkhBb6TcPVB4NmzaPhMs1Frm9AZH7OD4Cjzw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-whitespace": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-whitespace/-/micromark-factory-whitespace-2.0.1.tgz",
++      "integrity": "sha512-Ob0nuZ3PKt/n0hORHyvoD9uZhr+Za8sFoP+OnMcnWK5lngSzALgQYKMr9RJVOWLqQYuyn6ulqGWSXdwf6F80lQ==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-character": {
++      "version": "2.1.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-character/-/micromark-util-character-2.1.1.tgz",
++      "integrity": "sha512-wv8tdUTJ3thSFFFJKtpYKOYiGP2+v96Hvk4Tu8KpCAsTMs6yi+nVmGh1syvSCsaxz45J6Jbw+9DD6g97+NV67Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-chunked": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-chunked/-/micromark-util-chunked-2.0.1.tgz",
++      "integrity": "sha512-QUNFEOPELfmvv+4xiNg2sRYeS/P84pTW0TCgP5zc9FpXetHY0ab7SxKyAQCNCc1eK0459uoLI1y5oO5Vc1dbhA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-classify-character": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-classify-character/-/micromark-util-classify-character-2.0.1.tgz",
++      "integrity": "sha512-K0kHzM6afW/MbeWYWLjoHQv1sgg2Q9EccHEDzSkxiP/EaagNzCm7T/WMKZ3rjMbvIpvBiZgwR3dKMygtA4mG1Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-combine-extensions": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-combine-extensions/-/micromark-util-combine-extensions-2.0.1.tgz",
++      "integrity": "sha512-OnAnH8Ujmy59JcyZw8JSbK9cGpdVY44NKgSM7E9Eh7DiLS2E9RNQf0dONaGDzEG9yjEl5hcqeIsj4hfRkLH/Bg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-decode-numeric-character-reference": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/micromark-util-decode-numeric-character-reference/-/micromark-util-decode-numeric-character-reference-2.0.2.tgz",
++      "integrity": "sha512-ccUbYk6CwVdkmCQMyr64dXz42EfHGkPQlBj5p7YVGzq8I7CtjXZJrubAYezf7Rp+bjPseiROqe7G6foFd+lEuw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-decode-string": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-decode-string/-/micromark-util-decode-string-2.0.1.tgz",
++      "integrity": "sha512-nDV/77Fj6eH1ynwscYTOsbK7rR//Uj0bZXBwJZRfaLEJ1iGBR6kIfNmlNqaqJf649EP0F3NWNdeJi03elllNUQ==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "decode-named-character-reference": "^1.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-decode-numeric-character-reference": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-edit-map": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/micromark-util-edit-map/-/micromark-util-edit-map-1.0.0.tgz",
++      "integrity": "sha512-Pa2ljlsEL6sVwFaYeyrOLSYbQt73JvGbPOYFq+9AElXiSnfI5Q4465RRZ1sHv7lDjDOnGRDDaqPXqClqWK/q1Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-encode": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-encode/-/micromark-util-encode-2.0.1.tgz",
++      "integrity": "sha512-c3cVx2y4KqUnwopcO9b/SCdo2O67LwJJ/UyqGfbigahfegL9myoEFoDYZgkT7f36T0bLrM9hZTAaAyH+PCAXjw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT"
++    },
++    "node_modules/micromark-util-html-tag-name": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-html-tag-name/-/micromark-util-html-tag-name-2.0.1.tgz",
++      "integrity": "sha512-2cNEiYDhCWKI+Gs9T0Tiysk136SnR13hhO8yW6BGNyhOC4qYFnwF1nKfD3HFAIXA5c45RrIG1ub11GiXeYd1xA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT"
++    },
++    "node_modules/micromark-util-normalize-identifier": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-normalize-identifier/-/micromark-util-normalize-identifier-2.0.1.tgz",
++      "integrity": "sha512-sxPqmo70LyARJs0w2UclACPUUEqltCkJ6PhKdMIDuJ3gSf/Q+/GIe3WKl0Ijb/GyH9lOpUkRAO2wp0GVkLvS9Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-resolve-all": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-resolve-all/-/micromark-util-resolve-all-2.0.1.tgz",
++      "integrity": "sha512-VdQyxFWFT2/FGJgwQnJYbe1jjQoNTS4RjglmSjTUlpUMa95Htx9NHeYW4rGDJzbjvCsl9eLjMQwGeElsqmzcHg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-sanitize-uri": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-sanitize-uri/-/micromark-util-sanitize-uri-2.0.1.tgz",
++      "integrity": "sha512-9N9IomZ/YuGGZZmQec1MbgxtlgougxTodVwDzzEouPKo3qFWvymFHWcnDi2vzV1ff6kas9ucW+o3yzJK9YB1AQ==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-encode": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-subtokenize": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-util-subtokenize/-/micromark-util-subtokenize-2.1.0.tgz",
++      "integrity": "sha512-XQLu552iSctvnEcgXw6+Sx75GflAPNED1qx7eBJ+wydBb2KCbRZe+NwvIEEMM83uml1+2WSXpBAcp9IUCgCYWA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-symbol": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-symbol/-/micromark-util-symbol-2.0.1.tgz",
++      "integrity": "sha512-vs5t8Apaud9N28kgCrRUdEed4UJ+wWNvicHLPxCa9ENlYuAY31M0ETy5y1vA33YoNPDFTghEbnh6efaE8h4x0Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT"
++    },
++    "node_modules/micromark-util-types": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/micromark-util-types/-/micromark-util-types-2.0.3.tgz",
++      "integrity": "sha512-oxB2Ik03hI0gv+VNn9tnh1t1YEe9MDPptViAEgfdf3YQHsn0pzGTgCdlSCJXcwhqm8phaEuM7zeEu3QQzVBrPg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT"
++    },
++    "node_modules/ms": {
++      "version": "2.1.3",
++      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
++      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
++      "license": "MIT"
++    },
++    "node_modules/nanoid": {
++      "version": "3.3.20",
++      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.20.tgz",
++      "integrity": "sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==",
++      "dev": true,
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/ai"
++        }
++      ],
++      "license": "MIT",
++      "bin": {
++        "nanoid": "bin/nanoid.cjs"
++      },
++      "engines": {
++        "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
++      }
++    },
++    "node_modules/node-releases": {
++      "version": "2.0.60",
++      "resolved": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.60.tgz",
++      "integrity": "sha512-OmO8+GM1JUZqXET720VrJCwkjUCXmCMQm0Z3UDDRbfNLHS4NEAvY60j5jiFv0tkKw2PNNlqOLhahVmwJIOLDIQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/oxlint": {
++      "version": "1.89.0",
++      "resolved": "https://registry.npmjs.org/oxlint/-/oxlint-1.89.0.tgz",
++      "integrity": "sha512-a25hkfo61okGPvJz432fRIPoxlKtNnOVy9w4rzrmGgNm4iVTPwpSQlmdqNWnp6p9QyyPVfAZRgnf5XvSBZFk/A==",
++      "dev": true,
++      "license": "MIT",
++      "bin": {
++        "oxlint": "bin/oxlint"
++      },
++      "engines": {
++        "node": "^20.19.0 || >=22.12.0"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/oxc-project"
++      },
++      "optionalDependencies": {
++        "@oxlint/binding-android-arm-eabi": "1.89.0",
++        "@oxlint/binding-android-arm64": "1.89.0",
++        "@oxlint/binding-darwin-arm64": "1.89.0",
++        "@oxlint/binding-darwin-x64": "1.89.0",
++        "@oxlint/binding-freebsd-x64": "1.89.0",
++        "@oxlint/binding-linux-arm-gnueabihf": "1.89.0",
++        "@oxlint/binding-linux-arm-musleabihf": "1.89.0",
++        "@oxlint/binding-linux-arm64-gnu": "1.89.0",
++        "@oxlint/binding-linux-arm64-musl": "1.89.0",
++        "@oxlint/binding-linux-ppc64-gnu": "1.89.0",
++        "@oxlint/binding-linux-riscv64-gnu": "1.89.0",
++        "@oxlint/binding-linux-riscv64-musl": "1.89.0",
++        "@oxlint/binding-linux-s390x-gnu": "1.89.0",
++        "@oxlint/binding-linux-x64-gnu": "1.89.0",
++        "@oxlint/binding-linux-x64-musl": "1.89.0",
++        "@oxlint/binding-openharmony-arm64": "1.89.0",
++        "@oxlint/binding-win32-arm64-msvc": "1.89.0",
++        "@oxlint/binding-win32-ia32-msvc": "1.89.0",
++        "@oxlint/binding-win32-x64-msvc": "1.89.0"
++      },
++      "peerDependencies": {
++        "oxlint-tsgolint": ">=7.0.2003",
++        "vite-plus": "*"
++      },
++      "peerDependenciesMeta": {
++        "oxlint-tsgolint": {
++          "optional": true
++        },
++        "vite-plus": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/parse-entities": {
++      "version": "4.0.2",
++      "resolved": "https://registry.npmjs.org/parse-entities/-/parse-entities-4.0.2.tgz",
++      "integrity": "sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^2.0.0",
++        "character-entities-legacy": "^3.0.0",
++        "character-reference-invalid": "^2.0.0",
++        "decode-named-character-reference": "^1.0.0",
++        "is-alphanumerical": "^2.0.0",
++        "is-decimal": "^2.0.0",
++        "is-hexadecimal": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/parse-entities/node_modules/@types/unist": {
++      "version": "2.0.11",
++      "resolved": "https://registry.npmjs.org/@types/unist/-/unist-2.0.11.tgz",
++      "integrity": "sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA==",
++      "license": "MIT"
++    },
++    "node_modules/picocolors": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
++      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
++      "dev": true,
++      "license": "ISC"
++    },
++    "node_modules/picomatch": {
++      "version": "4.0.7",
++      "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz",
++      "integrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=12"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/jonschlinkert"
++      }
++    },
++    "node_modules/postcss": {
++      "version": "8.5.31",
+       "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.31.tgz",
+       "integrity": "sha512-YUbWYCgErwnMAVkjUnYa+KlMBzGpHwiIt/DE7f0G33AuX2LH9UcTk6KgWxd3zRU+pN3u/C+Xl3EnMLM4Hea7Sg==",
+       "dev": true,
+@@ -2009,6 +2952,16 @@
+         "node": "^10 || ^12 || >=14"
+       }
+     },
++    "node_modules/property-information": {
++      "version": "7.2.0",
++      "resolved": "https://registry.npmjs.org/property-information/-/property-information-7.2.0.tgz",
++      "integrity": "sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/react": {
+       "version": "19.3.1",
+       "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+@@ -2037,6 +2990,33 @@
+       "license": "MIT",
+       "peer": true
+     },
++    "node_modules/react-markdown": {
++      "version": "10.1.0",
++      "resolved": "https://registry.npmjs.org/react-markdown/-/react-markdown-10.1.0.tgz",
++      "integrity": "sha512-qKxVopLT/TyA6BX3Ue5NwabOsAzm0Q7kAPwq6L+wWDwisYs7R8vZ0nRXqq6rkueboxpkjvLGU9fWifiX/ZZFxQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "hast-util-to-jsx-runtime": "^2.0.0",
++        "html-url-attributes": "^3.0.0",
++        "mdast-util-to-hast": "^13.0.0",
++        "remark-parse": "^11.0.0",
++        "remark-rehype": "^11.0.0",
++        "unified": "^11.0.0",
++        "unist-util-visit": "^5.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      },
++      "peerDependencies": {
++        "@types/react": ">=18",
++        "react": ">=18"
++      }
++    },
+     "node_modules/react-redux": {
+       "version": "9.3.0",
+       "resolved": "https://registry.npmjs.org/react-redux/-/react-redux-9.3.0.tgz",
+@@ -2105,6 +3085,39 @@
+         "redux": "^5.0.0"
+       }
+     },
++    "node_modules/remark-parse": {
++      "version": "11.0.0",
++      "resolved": "https://registry.npmjs.org/remark-parse/-/remark-parse-11.0.0.tgz",
++      "integrity": "sha512-FCxlKLNGknS5ba/1lmpYijMUzX2esxW5xQqjWxw2eHFfS2MSdaHVINFmhjo+qN1WhZhNimq0dZATN9pH0IDrpA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "micromark-util-types": "^2.0.0",
++        "unified": "^11.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/remark-rehype": {
++      "version": "11.1.2",
++      "resolved": "https://registry.npmjs.org/remark-rehype/-/remark-rehype-11.1.2.tgz",
++      "integrity": "sha512-Dh7l57ianaEoIpzbp0PC9UKAdCSVklD8E5Rpw7ETfbTl3FqcOOgq5q2LVDhgGCkaBv7p24JXikPdvhhmHvKMsw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "mdast-util-to-hast": "^13.0.0",
++        "unified": "^11.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/reselect": {
+       "version": "5.2.0",
+       "resolved": "https://registry.npmjs.org/reselect/-/reselect-5.2.0.tgz",
+@@ -2192,6 +3205,48 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/space-separated-tokens": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/space-separated-tokens/-/space-separated-tokens-2.0.2.tgz",
++      "integrity": "sha512-PEGlAwrG8yXGXRjW32fGbg66JAlOAwbObuqVoJpv/mRgoWDQfgH1wDPvtzWyUSNAXBGSk8h755YDbbcEy3SH2Q==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/stringify-entities": {
++      "version": "4.0.4",
++      "resolved": "https://registry.npmjs.org/stringify-entities/-/stringify-entities-4.0.4.tgz",
++      "integrity": "sha512-IwfBptatlO+QCJUo19AqvrPNqlVMpW9YEL2LIVY+Rpv2qsjCGxaDLNRgeGsQWJhfItebuJhsGSLjaBbNSQ+ieg==",
++      "license": "MIT",
++      "dependencies": {
++        "character-entities-html4": "^2.0.0",
++        "character-entities-legacy": "^3.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/style-to-js": {
++      "version": "1.1.21",
++      "resolved": "https://registry.npmjs.org/style-to-js/-/style-to-js-1.1.21.tgz",
++      "integrity": "sha512-RjQetxJrrUJLQPHbLku6U/ocGtzyjbJMP9lCNK7Ag0CNh690nSH8woqWH9u16nMjYBAok+i7JO1NP2pOy8IsPQ==",
++      "license": "MIT",
++      "dependencies": {
++        "style-to-object": "1.0.14"
++      }
++    },
++    "node_modules/style-to-object": {
++      "version": "1.0.14",
++      "resolved": "https://registry.npmjs.org/style-to-object/-/style-to-object-1.0.14.tgz",
++      "integrity": "sha512-LIN7rULI0jBscWQYaSswptyderlarFkjQ+t79nzty8tcIAceVomEVlLzH5VP4Cmsv6MtKhs7qaAiwlcp+Mgaxw==",
++      "license": "MIT",
++      "dependencies": {
++        "inline-style-parser": "0.2.7"
++      }
++    },
+     "node_modules/tiny-invariant": {
+       "version": "1.3.3",
+       "resolved": "https://registry.npmjs.org/tiny-invariant/-/tiny-invariant-1.3.3.tgz",
+@@ -2215,6 +3270,113 @@
+         "url": "https://github.com/sponsors/SuperchupuDev"
+       }
+     },
++    "node_modules/trim-lines": {
++      "version": "3.0.1",
++      "resolved": "https://registry.npmjs.org/trim-lines/-/trim-lines-3.0.1.tgz",
++      "integrity": "sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/trough": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/trough/-/trough-2.2.0.tgz",
++      "integrity": "sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/unified": {
++      "version": "11.0.5",
++      "resolved": "https://registry.npmjs.org/unified/-/unified-11.0.5.tgz",
++      "integrity": "sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "bail": "^2.0.0",
++        "devlop": "^1.0.0",
++        "extend": "^3.0.0",
++        "is-plain-obj": "^4.0.0",
++        "trough": "^2.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-is": {
++      "version": "6.0.1",
++      "resolved": "https://registry.npmjs.org/unist-util-is/-/unist-util-is-6.0.1.tgz",
++      "integrity": "sha512-LsiILbtBETkDz8I9p1dQ0uyRUWuaQzd/cuEeS1hoRSyW5E5XGmTzlwY1OrNzzakGowI9Dr/I8HVaw4hTtnxy8g==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-position": {
++      "version": "5.0.0",
++      "resolved": "https://registry.npmjs.org/unist-util-position/-/unist-util-position-5.0.0.tgz",
++      "integrity": "sha512-fucsC7HjXvkB5R3kTCO7kUjRdrS0BJt3M/FPxmHMBOm8JQi2BsHAHFsy27E0EolP8rp0NzXsJ+jNPyDWvOJZPA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-stringify-position": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/unist-util-stringify-position/-/unist-util-stringify-position-4.0.0.tgz",
++      "integrity": "sha512-0ASV06AAoKCDkS2+xw5RXJywruurpbC4JZSm7nr7MOt1ojAzvyyaO+UxZf18j8FCF6kmzCZKcAgN/yu2gm2XgQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-visit": {
++      "version": "5.2.0",
++      "resolved": "https://registry.npmjs.org/unist-util-visit/-/unist-util-visit-5.2.0.tgz",
++      "integrity": "sha512-fpsYs/VVoZxfGY9/j3FQpZmN8wdLJaV1Pt38AaJNZu9uKIHcFU3halCdBveEq1HGKO1OEfJY65w1zvoFV1b3qQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "unist-util-is": "^6.0.0",
++        "unist-util-visit-parents": "^6.1.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-visit-parents": {
++      "version": "6.1.0",
++      "resolved": "https://registry.npmjs.org/unist-util-visit-parents/-/unist-util-visit-parents-6.1.0.tgz",
++      "integrity": "sha512-vKXxz6O38sKDj1mtx/k2cWvkkFBuYGx6uGrlzBkVeWCRF/F8sdI0j3Wbkz/5rVNRRuVc8UrgRdbCxNhmYXgP3w==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "unist-util-is": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/update-browserslist-db": {
+       "version": "1.3.4",
+       "resolved": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.4.tgz",
+@@ -2255,6 +3417,34 @@
+         "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+       }
+     },
++    "node_modules/vfile": {
++      "version": "6.0.3",
++      "resolved": "https://registry.npmjs.org/vfile/-/vfile-6.0.3.tgz",
++      "integrity": "sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "vfile-message": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/vfile-message": {
++      "version": "4.0.3",
++      "resolved": "https://registry.npmjs.org/vfile-message/-/vfile-message-4.0.3.tgz",
++      "integrity": "sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "unist-util-stringify-position": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/victory-vendor": {
+       "version": "37.4.1",
+       "resolved": "https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.4.1.tgz",
+@@ -2361,6 +3551,16 @@
+       "integrity": "sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==",
+       "dev": true,
+       "license": "ISC"
++    },
++    "node_modules/zwitch": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/zwitch/-/zwitch-2.0.4.tgz",
++      "integrity": "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
+     }
+   }
+ }
+diff --git a/frontend/package.json b/frontend/package.json
+index c2a3b4d..e26de23 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -15,6 +15,7 @@
+     "lucide-react": "^1.61.0",
+     "react": "^19.3.1",
+     "react-dom": "^19.3.1",
++    "react-markdown": "^10.1.0",
+     "recharts": "^3.10.1"
+   },
+   "devDependencies": {
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index fca8d3d..b03af8c 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -59,9 +59,9 @@ function Shell() {
+   useEffect(() => {
+     if (!userId || profile) return undefined
+     const controller = new AbortController()
+-    loadProfile(controller.signal)
++    loadProfile(controller.signal, session.user)
+     return () => controller.abort()
+-  }, [userId, profile, loadProfile])
++  }, [userId, profile, loadProfile, session?.user])
+ 
+   const currentPage = pathname === '/' ? 'home'
+     : pathname === '/login' ? 'login'
+@@ -204,13 +204,20 @@ export default function App() {
+   const [jdData, setJdData] = useState(null)
+ 
+   const setProfile = useCallback((value) => { setProfileState(value); setProfileError('') }, [])
+-  const loadProfile = useCallback(async (signal) => {
++  const loadProfile = useCallback(async (signal, user = session?.user) => {
+     setProfileLoading(true)
+     setProfileError('')
+-    try { setProfileState(await profileService.getProfile({ signal })) }
++    try {
++      const savedProfile = await profileService.getProfile({ signal })
++      setProfileState(savedProfile || (user ? {
++        skills: [], education: {}, internships: [], hackathons: [], certifications: [], preferred_roles: [],
++        ...user,
++        source: 'manual',
++      } : null))
++    }
+     catch (error) { if (error.name !== 'AbortError') setProfileError(error.message || 'Unable to load your profile.') }
+     finally { setProfileLoading(false) }
+-  }, [])
++  }, [session?.user])
+   const appState = useMemo(() => ({
+     session, setSession, profile, setProfile, jdData, setJdData, profileLoading,
+     profileError, profileNotice, setProfileNotice, loadProfile,
+diff --git a/frontend/src/components/AuthPages.jsx b/frontend/src/components/AuthPages.jsx
+index 2bbda9e..17efc83 100644
+--- a/frontend/src/components/AuthPages.jsx
++++ b/frontend/src/components/AuthPages.jsx
+@@ -157,7 +157,29 @@ export function SignupPage() {
+       setSession(nextSession)
+ 
+       if (mode === 'resume') {
+-        setProfile({ ...resumeProfile, name, email, source: 'resume' })
++        const candidateProfile = { ...resumeProfile, name, email, source: 'resume' }
++        setProfile(candidateProfile)
++        const education = candidateProfile.education
++        const cgpa = Number(education?.cgpa)
++        const hasCompleteEducation = Boolean(
++          education?.degree?.trim() && education?.college?.trim() &&
++          (education?.graduation_year || education?.graducation_year) &&
++          Number.isFinite(cgpa) && cgpa > 1 && cgpa <= 10,
++        )
++        try {
++          const savedProfile = await profileService.saveProfile({
++            name, email,
++            skills: candidateProfile.skills,
++            ...(hasCompleteEducation ? { education: { ...education, cgpa, graduation_year: education.graduation_year || education.graducation_year } } : {}),
++            hackathons: candidateProfile.hackathons,
++            internships: candidateProfile.internships,
++            certifications: candidateProfile.certifications,
++            preferred_roles: candidateProfile.preferred_roles,
++          })
++          setProfile({ ...candidateProfile, ...savedProfile, skills: savedProfile.skills || candidateProfile.skills, education: savedProfile.education || candidateProfile.education })
++        } catch (saveError) {
++          console.error('Could not save extracted profile.', saveError)
++        }
+         await navigate({ to: '/profile/setup', search: { review: true } })
+       } else {
+         setProfile({ name, email, source: 'manual', skills: [] })
+diff --git a/frontend/src/components/Chatbot.css b/frontend/src/components/Chatbot.css
+index 5643a47..92ec127 100644
+--- a/frontend/src/components/Chatbot.css
++++ b/frontend/src/components/Chatbot.css
+@@ -207,6 +207,41 @@
+   border-bottom-right-radius: 2px;
+ }
+ 
++.chatbot-msg-bubble > :first-child { margin-top: 0; }
++.chatbot-msg-bubble > :last-child { margin-bottom: 0; }
++.chatbot-msg-bubble p { margin: 0.45em 0; }
++.chatbot-msg-bubble ul,
++.chatbot-msg-bubble ol { margin: 0.45em 0; padding-left: 1.35em; }
++.chatbot-msg-bubble li + li { margin-top: 0.2em; }
++.chatbot-msg-bubble blockquote {
++  margin: 0.55em 0;
++  padding-left: 0.75em;
++  border-left: 2px solid var(--color-secondary);
++  color: var(--text-muted);
++}
++.chatbot-msg-bubble a { color: var(--color-secondary); text-decoration: underline; }
++.chatbot-msg.user .chatbot-msg-bubble a { color: inherit; }
++.chatbot-msg-bubble pre {
++  overflow-x: auto;
++  margin: 0.55em 0;
++  padding: 0.65em 0.75em;
++  border: 1px solid var(--border);
++  border-radius: var(--radius-xs);
++  background: var(--surface-inset);
++  white-space: pre;
++}
++.chatbot-msg-bubble code {
++  padding: 0.08em 0.28em;
++  border-radius: 3px;
++  background: rgba(2, 0, 13, 0.08);
++  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
++  font-size: 0.92em;
++}
++.chatbot-msg-bubble pre code { padding: 0; background: none; }
++.chatbot-msg-bubble table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
++.chatbot-msg-bubble th,
++.chatbot-msg-bubble td { padding: 0.3em 0.5em; border: 1px solid var(--border); text-align: left; }
++
+ /* Typing Indicator */
+ .chatbot-typing {
+   display: flex;
+diff --git a/frontend/src/components/Chatbot.jsx b/frontend/src/components/Chatbot.jsx
+index a73d0fc..e9c2514 100644
+--- a/frontend/src/components/Chatbot.jsx
++++ b/frontend/src/components/Chatbot.jsx
+@@ -1,5 +1,6 @@
+ import { useState, useRef, useEffect, useId } from 'react'
+ import { MessageSquare, X, Send, Bot, Sparkles, User, AlertCircle } from 'lucide-react'
++import ReactMarkdown from 'react-markdown'
+ import { api } from '../services/api'
+ import './Chatbot.css'
+ 
+@@ -155,9 +156,7 @@ export default function Chatbot() {
+                   {msg.role === 'assistant' ? <Sparkles size={13} strokeWidth={2} /> : <User size={13} strokeWidth={2} />}
+                 </div>
+                 <div className="chatbot-msg-bubble">
+-                  {msg.text.split('\n').map((line, i) => (
+-                    <span key={i}>{line}{i < msg.text.split('\n').length - 1 && <br/>}</span>
+-                  ))}
++                  <ReactMarkdown>{String(msg.text)}</ReactMarkdown>
+                   {msg.isStub && (
+                     <div style={{ marginTop: '6px', fontSize: '10px', opacity: 0.65, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                       <AlertCircle size={11} strokeWidth={2} aria-hidden="true" />
+* Unmerged path frontend/src/components/workflow/CompanyMatchesPage.css
+diff --git a/frontend/src/components/workflow/MatchWizard.jsx b/frontend/src/components/workflow/MatchWizard.jsx
+index b6ba3bc..feae682 100644
+--- a/frontend/src/components/workflow/MatchWizard.jsx
++++ b/frontend/src/components/workflow/MatchWizard.jsx
+@@ -5,12 +5,12 @@ import { profileService } from '../../services/profileService'
+ import { resultsService } from '../../services/resultsService'
+ import { PageHeader } from '../ui/PageHeader'
+ import { WizardStepper } from './WizardStepper'
+-import { Step1Resume } from './Step1Resume'
+-import { Step2ProfileReview } from './Step2ProfileReview'
+-import { Step3JobDescription } from './Step3JobDescription'
+-import { Step4JdReview } from './Step4JdReview'
++import { Step2Resume } from './Step2Resume'
++import { Step3ProfileBuilder } from './Step3ProfileBuilder'
++import { Step1JdInput } from './Step1JdInput'
++import { Step1JdAnalytics } from './Step1JdAnalytics'
+ import { Step5SkillMatching } from './Step5SkillMatching'
+-import { Step6TalentCheck } from './Step6TalentCheck'
++import { Step4TalentCheck } from './Step4TalentCheck'
+ import { Step6Results } from './Step6Results'
+ import './MatchWizard.css'
+ 
+@@ -28,27 +28,27 @@ export function MatchWizard({
+   const initialJdSeededRef = useRef(Boolean(initialJdData))
+   const startedNewAnalysisRef = useRef(false)
+ 
+-  // ── Step 1 State: Resume ────────────────────────────────────────────────
++  // ── Step 2 State: Resume ────────────────────────────────────────────────
+   const [resumeFile, setResumeFile] = useState(null)
+   const [isUploadingResume, setIsUploadingResume] = useState(false)
+   const [resumeError, setResumeError] = useState(null)
+ 
+-  // ── Step 2 State: Profile ───────────────────────────────────────────────
++  // ── Step 3 State: Profile ───────────────────────────────────────────────
+   const [originalProfile, setOriginalProfile] = useState(initialProfile)
+   const [editedProfile, setEditedProfile] = useState(initialProfile)
+   const [isProfileEdited, setIsProfileEdited] = useState(false)
+ 
+-  // ── Step 3 State: Job Description ───────────────────────────────────────
+-  const [jdInputMode, setJdInputMode] = useState('text') // 'text' | 'file'
++  // ── Step 1 State: Job Description ───────────────────────────────────────
++  const [jdInputMode, setJdInputMode] = useState('file') // 'text' | 'file'
+   const [jdText, setJdText] = useState('')
+   const [jdFile, setJdFile] = useState(null)
+   const [isAnalyzingJd, setIsAnalyzingJd] = useState(false)
+   const [jdError, setJdError] = useState(null)
+ 
+-  // ── Step 4 State: JD Extraction ─────────────────────────────────────────
++  // ── Step 1 State: JD Extraction ─────────────────────────────────────────
+   const [jdData, setJdData] = useState(initialJdData)
+ 
+-  // ── Step 5–7 State: Skill Matching, Talent Check & Results ──────────────
++  // ── Step 4–6 State: Talent Check, Skill Matching & Results ──────────────
+   const [matchResult, setMatchResult] = useState(null)
+   const [talentResult, setTalentResult] = useState(null)
+   const [isMatching, setIsMatching] = useState(false)
+@@ -88,7 +88,7 @@ export function MatchWizard({
+     if (!initialProfile) return
+     const profile = JSON.parse(JSON.stringify(initialProfile))
+     setOriginalProfile(profile); setEditedProfile(profile); setIsProfileEdited(false)
+-    setMatchResult(null); setTalentResult(null); setMaxStepReached((prev) => Math.max(prev, 2)); goToStep(2)
++    setMatchResult(null); setTalentResult(null); setMaxStepReached((prev) => Math.max(prev, 3)); goToStep(3)
+   }
+ 
+   // ── Navigation between steps ────────────────────────────────────────────
+@@ -97,7 +97,7 @@ export function MatchWizard({
+     window.scrollTo({ top: 0, behavior: 'smooth' })
+   }
+ 
+-  // ── Step 1: Resume Upload Submission ────────────────────────────────────
++  // ── Step 2: Resume Upload Submission ────────────────────────────────────
+   const handleResumeSubmit = async (file) => {
+     if (!file || isUploadingResume) return
+     setResumeError(null)
+@@ -120,8 +120,8 @@ export function MatchWizard({
+ 
+       if (onProfileSynced) onProfileSynced(data)
+ 
+-      setMaxStepReached((prev) => Math.max(prev, 2))
+-      goToStep(2)
++      setMaxStepReached((prev) => Math.max(prev, 3))
++      goToStep(3)
+     } catch (err) {
+       if (err.name !== 'AbortError') setResumeError(err.message || 'Failed to extract candidate profile.')
+     } finally {
+@@ -130,7 +130,7 @@ export function MatchWizard({
+     }
+   }
+ 
+-  // When a user selects a new file in Step 1, invalidate downstream profile
++  // When a user selects a new file in Step 2, invalidate downstream profile
+   const handleResumeFileChange = (newFile) => {
+     setResumeFile(newFile)
+     if (!newFile) {
+@@ -139,11 +139,11 @@ export function MatchWizard({
+       setIsProfileEdited(false)
+       setMatchResult(null)
+       setTalentResult(null)
+-      setMaxStepReached(1)
++      setMaxStepReached(2)
+     }
+   }
+ 
+-  // ── Step 2: Profile Review Edits ────────────────────────────────────────
++  // ── Step 3: Profile Review Edits ────────────────────────────────────────
+   const handleProfileChange = (updatedProfile) => {
+     setEditedProfile(updatedProfile)
+     setIsProfileEdited(true)
+@@ -167,7 +167,7 @@ export function MatchWizard({
+       if (onProfileSynced) onProfileSynced(reviewedProfile)
+       setProfilePersistenceWarning(`Your reviewed profile could not be saved. This match will use the reviewed draft. ${err.message}`)
+     }
+-    setMaxStepReached((prev) => Math.max(prev, 3)); goToStep(3)
++    setMaxStepReached((prev) => Math.max(prev, 4)); goToStep(4)
+   }
+ 
+   const handleResetOriginalProfile = () => {
+@@ -180,7 +180,7 @@ export function MatchWizard({
+     }
+   }
+ 
+-  // ── Step 3: Job Description Input ───────────────────────────────────────
++  // ── Step 1: Job Description Input ───────────────────────────────────────
+   const handleJdInputChange = ({ mode, text, file }) => {
+     setJdInputMode(mode)
+     setJdText(text)
+@@ -212,8 +212,8 @@ export function MatchWizard({
+       setTalentResult(null)
+       if (onJdSynced) onJdSynced(data)
+ 
+-      setMaxStepReached((prev) => Math.max(prev, 4))
+-      goToStep(4)
++      setMaxStepReached((prev) => Math.max(prev, 1))
++      goToStep(1)
+     } catch (err) {
+       if (err.name !== 'AbortError') setJdError(err.message || 'Failed to parse job description.')
+       // Stay on step 3 to show error and allow quick correction
+@@ -256,8 +256,6 @@ export function MatchWizard({
+         }).catch(() => {})
+       }
+       setMaxStepReached((prev) => Math.max(prev, 6))
+-      // Continue to the company talent-check step after skill matching.
+-      goToStep(6)
+     } catch (err) {
+       if (err.name !== 'AbortError') setMatchingError(err.message || 'Failed to calculate role alignment.')
+     } finally {
+@@ -266,13 +264,14 @@ export function MatchWizard({
+     }
+   }
+ 
+-  // ── Step 7: Start New Analysis ──────────────────────────────────────────
++  // ── Start New Analysis ──────────────────────────────────────────────────
+   const handleStartNewAnalysis = () => {
+     startedNewAnalysisRef.current = true
+     setResumeFile(null)
+     setOriginalProfile(null)
+     setEditedProfile(null)
+     setIsProfileEdited(false)
++    setJdInputMode('file')
+     setJdText('')
+     setJdFile(null)
+     setJdData(null)
+@@ -302,8 +301,35 @@ export function MatchWizard({
+       {profilePersistenceWarning && <div className="wizard-persistence-warning" role="status">{profilePersistenceWarning}</div>}
+ 
+       <div className="wizard-step-stage">
+-        {currentStep === 1 && (
+-          <Step1Resume
++        {currentStep === 1 && !jdData && (
++          <Step1JdInput
++            inputMode={jdInputMode}
++            jdText={jdText}
++            jdFile={jdFile}
++            onInputChange={handleJdInputChange}
++            onSubmit={handleJdSubmit}
++            onBack={() => {}}
++            isProcessing={isAnalyzingJd}
++            error={jdError}
++          />
++        )}
++
++        {currentStep === 1 && jdData && (
++          <Step1JdAnalytics
++            jdData={jdData}
++            onRetry={() => handleJdSubmit({ mode: jdInputMode, text: jdText, file: jdFile })}
++            onBack={() => setJdData(null)}
++            onNext={() => {
++              setMaxStepReached((prev) => Math.max(prev, 2))
++              goToStep(2)
++            }}
++            isProcessing={isAnalyzingJd}
++            error={jdError}
++          />
++        )}
++
++        {currentStep === 2 && (
++          <Step2Resume
+             selectedFile={resumeFile}
+             onFileChange={handleResumeFileChange}
+             onSubmit={handleResumeSubmit}
+@@ -316,43 +342,29 @@ export function MatchWizard({
+           />
+         )}
+ 
+-        {currentStep === 2 && editedProfile && (
+-          <Step2ProfileReview
++        {currentStep === 3 && editedProfile && (
++          <Step3ProfileBuilder
+             originalProfile={originalProfile}
+             profile={editedProfile}
+             onProfileChange={handleProfileChange}
+             onResetOriginal={handleResetOriginalProfile}
+-            onBack={() => goToStep(1)}
++            onBack={() => goToStep(2)}
+             onNext={handleConfirmProfile}
+             isEdited={isProfileEdited}
+             error={resumeError}
+           />
+         )}
+ 
+-        {currentStep === 3 && (
+-          <Step3JobDescription
+-            inputMode={jdInputMode}
+-            jdText={jdText}
+-            jdFile={jdFile}
+-            onInputChange={handleJdInputChange}
+-            onSubmit={handleJdSubmit}
+-            onBack={() => goToStep(2)}
+-            isProcessing={isAnalyzingJd}
+-            error={jdError}
+-          />
+-        )}
+-
+         {currentStep === 4 && (
+-          <Step4JdReview
++          <Step4TalentCheck
++            profile={editedProfile || originalProfile}
+             jdData={jdData}
+-            onRetry={() => handleJdSubmit({ mode: jdInputMode, text: jdText, file: jdFile })}
+             onBack={() => goToStep(3)}
+-            onNext={() => {
++            onComplete={(result) => {
++              setTalentResult(result)
+               setMaxStepReached((prev) => Math.max(prev, 5))
+               goToStep(5)
+             }}
+-            isProcessing={isAnalyzingJd}
+-            error={jdError}
+           />
+         )}
+ 
+@@ -369,30 +381,17 @@ export function MatchWizard({
+           />
+         )}
+ 
+-        {currentStep === 6 && matchResult && (
+-          <Step6TalentCheck
+-            profile={editedProfile || originalProfile}
+-            jdData={jdData}
+-            onBack={() => goToStep(5)}
+-            onComplete={(result) => {
+-              setTalentResult(result)
+-              setMaxStepReached((prev) => Math.max(prev, 7))
+-              goToStep(7)
+-            }}
+-          />
+-        )}
+-
+-        {currentStep === 7 && matchResult && talentResult && (
++        {currentStep === 6 && matchResult && talentResult && (
+           <Step6Results
+             matchResult={matchResult}
+             profile={editedProfile || originalProfile}
+             talentResult={talentResult}
+             jdData={jdData}
+-            stepNumber={7}
++            stepNumber={6}
+             stackSkillColumns
+             onStartNew={handleStartNewAnalysis}
+-            onEditProfile={() => goToStep(2)}
+-            onChangeJd={() => goToStep(3)}
++            onEditProfile={() => goToStep(3)}
++            onChangeJd={() => { setJdData(null); goToStep(1) }}
+             onViewCompanyMatches={() => onNavigate('/company-matches')}
+           />
+         )}
+diff --git a/frontend/src/components/workflow/Step4JdReview.css b/frontend/src/components/workflow/Step1JdAnalytics.css
+similarity index 100%
+rename from frontend/src/components/workflow/Step4JdReview.css
+rename to frontend/src/components/workflow/Step1JdAnalytics.css
+diff --git a/frontend/src/components/workflow/Step4JdReview.jsx b/frontend/src/components/workflow/Step1JdAnalytics.jsx
+similarity index 97%
+rename from frontend/src/components/workflow/Step4JdReview.jsx
+rename to frontend/src/components/workflow/Step1JdAnalytics.jsx
+index 163c5ba..49ccc59 100644
+--- a/frontend/src/components/workflow/Step4JdReview.jsx
++++ b/frontend/src/components/workflow/Step1JdAnalytics.jsx
+@@ -7,9 +7,9 @@ import {
+   Tag as TagIcon,
+ } from 'lucide-react'
+ import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Callout, Tag, Badge, LoadingOverlay } from '../ui'
+-import './Step4JdReview.css'
++import './Step1JdAnalytics.css'
+ 
+-export function Step4JdReview({
++export function Step1JdAnalytics({
+   jdData,
+   onRetry,
+   onBack,
+@@ -27,7 +27,7 @@ export function Step4JdReview({
+   return (
+     <div className="wizard-step-container">
+       <div className="wizard-step-header">
+-        <h2>Step 4: Review Extracted Role Requirements</h2>
++        <h2>Step 1: Review Extracted Role Requirements</h2>
+         <p>
+           The AI engine has parsed the job description into standardized RADIX competency categories and specific technical tools. Review what the position requires before matching.
+         </p>
+diff --git a/frontend/src/components/workflow/Step3JobDescription.css b/frontend/src/components/workflow/Step1JdInput.css
+similarity index 100%
+rename from frontend/src/components/workflow/Step3JobDescription.css
+rename to frontend/src/components/workflow/Step1JdInput.css
+diff --git a/frontend/src/components/workflow/Step3JobDescription.jsx b/frontend/src/components/workflow/Step1JdInput.jsx
+similarity index 97%
+rename from frontend/src/components/workflow/Step3JobDescription.jsx
+rename to frontend/src/components/workflow/Step1JdInput.jsx
+index e970c4f..9e8ece4 100644
+--- a/frontend/src/components/workflow/Step3JobDescription.jsx
++++ b/frontend/src/components/workflow/Step1JdInput.jsx
+@@ -10,10 +10,10 @@ import {
+ } from 'lucide-react'
+ import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Callout } from '../ui'
+ import { FileUploadZone } from '../ui/FileUploadZone'
+-import './Step3JobDescription.css'
++import './Step1JdInput.css'
+ 
+-export function Step3JobDescription({
+-  inputMode = 'text',
++export function Step1JdInput({
++  inputMode = 'file',
+   jdText = '',
+   jdFile = null,
+   onInputChange,
+@@ -83,7 +83,7 @@ export function Step3JobDescription({
+   return (
+     <div className="wizard-step-container">
+       <div className="wizard-step-header">
+-        <h2>Step 3: Provide Target Job Description</h2>
++        <h2>Step 1: Provide Target Job Description</h2>
+         <p>
+           Enter the job description for the role you wish to target. You can either paste the job posting text directly or upload the JD document.
+         </p>
+@@ -102,16 +102,6 @@ export function Step3JobDescription({
+ 
+               {/* Mode Switcher Tabs */}
+               <div className="jd-mode-tabs" role="tablist" aria-label="Job description input format">
+-                <button
+-                  type="button"
+-                  role="tab"
+-                  aria-selected={mode === 'text'}
+-                  className={`jd-tab-btn ${mode === 'text' ? 'active' : ''}`}
+-                  onClick={() => handleModeChange('text')}
+-                >
+-                  <FileText size={15} />
+-                  <span>Paste Text</span>
+-                </button>
+                 <button
+                   type="button"
+                   role="tab"
+@@ -122,6 +112,16 @@ export function Step3JobDescription({
+                   <Upload size={15} />
+                   <span>Upload Document</span>
+                 </button>
++                <button
++                  type="button"
++                  role="tab"
++                  aria-selected={mode === 'text'}
++                  className={`jd-tab-btn ${mode === 'text' ? 'active' : ''}`}
++                  onClick={() => handleModeChange('text')}
++                >
++                  <FileText size={15} />
++                  <span>Paste Text</span>
++                </button>
+               </div>
+             </div>
+           </CardHeader>
+diff --git a/frontend/src/components/workflow/Step1Resume.css b/frontend/src/components/workflow/Step2Resume.css
+similarity index 100%
+rename from frontend/src/components/workflow/Step1Resume.css
+rename to frontend/src/components/workflow/Step2Resume.css
+diff --git a/frontend/src/components/workflow/Step1Resume.jsx b/frontend/src/components/workflow/Step2Resume.jsx
+similarity index 98%
+rename from frontend/src/components/workflow/Step1Resume.jsx
+rename to frontend/src/components/workflow/Step2Resume.jsx
+index 25471af..44a0c49 100644
+--- a/frontend/src/components/workflow/Step1Resume.jsx
++++ b/frontend/src/components/workflow/Step2Resume.jsx
+@@ -4,7 +4,7 @@ import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Call
+ import { FileUploadZone } from '../ui/FileUploadZone'
+ import ProfileCard from '../ProfileCard'
+ import SkillsGrid from '../SkillsGrid'
+-import './Step1Resume.css'
++import './Step2Resume.css'
+ 
+ function formatFileSize(bytes) {
+   if (!bytes) return ''
+@@ -13,7 +13,7 @@ function formatFileSize(bytes) {
+   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+ }
+ 
+-export function Step1Resume({
++export function Step2Resume({
+   selectedFile,
+   onFileChange,
+   onSubmit,
+@@ -62,7 +62,7 @@ export function Step1Resume({
+   return (
+     <div className="wizard-step-container">
+       <div className="wizard-step-header">
+-        <h2>Step 1: Choose a candidate profile</h2>
++        <h2>Step 2: Choose a candidate profile</h2>
+         <p>
+           Use the profile you have already reviewed, or update it from a new resume.
+         </p>
+diff --git a/frontend/src/components/workflow/Step2ProfileReview.css b/frontend/src/components/workflow/Step3ProfileBuilder.css
+similarity index 100%
+rename from frontend/src/components/workflow/Step2ProfileReview.css
+rename to frontend/src/components/workflow/Step3ProfileBuilder.css
+diff --git a/frontend/src/components/workflow/Step2ProfileReview.jsx b/frontend/src/components/workflow/Step3ProfileBuilder.jsx
+similarity index 99%
+rename from frontend/src/components/workflow/Step2ProfileReview.jsx
+rename to frontend/src/components/workflow/Step3ProfileBuilder.jsx
+index fc993a7..8f76520 100644
+--- a/frontend/src/components/workflow/Step2ProfileReview.jsx
++++ b/frontend/src/components/workflow/Step3ProfileBuilder.jsx
+@@ -9,9 +9,9 @@ import {
+   Trash2,
+ } from 'lucide-react'
+ import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Badge } from '../ui'
+-import './Step2ProfileReview.css'
++import './Step3ProfileBuilder.css'
+ 
+-export function Step2ProfileReview({
++export function Step3ProfileBuilder({
+   _originalProfile,
+   profile,
+   onProfileChange,
+@@ -132,7 +132,7 @@ export function Step2ProfileReview({
+     <div className="wizard-step-container">
+       <div className="wizard-step-header">
+         <div className="header-badge-row">
+-          <h2>Step 2: Review &amp; Edit Extracted Profile</h2>
++          <h2>Step 3: Review &amp; Edit Extracted Profile</h2>
+           {isEdited && (
+             <Badge variant="accent" size="sm">
+               Custom Edits Applied
+diff --git a/frontend/src/components/workflow/Step6TalentCheck.jsx b/frontend/src/components/workflow/Step4TalentCheck.jsx
+similarity index 96%
+rename from frontend/src/components/workflow/Step6TalentCheck.jsx
+rename to frontend/src/components/workflow/Step4TalentCheck.jsx
+index e297c3d..b41f6ce 100644
+--- a/frontend/src/components/workflow/Step6TalentCheck.jsx
++++ b/frontend/src/components/workflow/Step4TalentCheck.jsx
+@@ -3,7 +3,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, Building2, RotateCcw } from 'lucide
+ import { api } from '../../services/api'
+ import { Button, Callout, Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui'
+ 
+-export function Step6TalentCheck({ profile, jdData, onBack, onComplete }) {
++export function Step4TalentCheck({ profile, jdData, onBack, onComplete }) {
+   const [companies, setCompanies] = useState([])
+   const [selectedCompany, setSelectedCompany] = useState('')
+   const [isLoadingCompanies, setIsLoadingCompanies] = useState(true)
+@@ -76,7 +76,7 @@ export function Step6TalentCheck({ profile, jdData, onBack, onComplete }) {
+   return (
+     <div className="wizard-step-container">
+       <div className="wizard-step-header">
+-        <h2>Step 6: Company Talent Check</h2>
++        <h2>Step 4: Company Talent Check</h2>
+         <p>Compare the candidate’s assessed skill levels with a company’s requirements.</p>
+       </div>
+ 
+@@ -116,7 +116,7 @@ export function Step6TalentCheck({ profile, jdData, onBack, onComplete }) {
+               </select>
+             </div>
+             <div className="wizard-action-bar">
+-              <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={onBack} disabled={isChecking}>Back to Skill Match</Button>
++              <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={onBack} disabled={isChecking}>Back to Profile Builder</Button>
+               <Button type="submit" variant="primary" size="lg" isLoading={isChecking || isLoadingCompanies} disabled={!selectedCompany || companies.length === 0} iconRight={<ArrowRight size={16} />}>
+                 Run Talent Check
+               </Button>
+diff --git a/frontend/src/components/workflow/Step5SkillMatching.jsx b/frontend/src/components/workflow/Step5SkillMatching.jsx
+index d109b16..63a065a 100644
+--- a/frontend/src/components/workflow/Step5SkillMatching.jsx
++++ b/frontend/src/components/workflow/Step5SkillMatching.jsx
+@@ -124,7 +124,7 @@ export function Step5SkillMatching({
+                   icon={<ArrowLeft size={16} />}
+                   onClick={onBack}
+                 >
+-                  Back to JD Review
++                  Back to Talent Check
+                 </Button>
+                 <Button
+                   variant="primary"
+diff --git a/frontend/src/components/workflow/Step6Results.jsx b/frontend/src/components/workflow/Step6Results.jsx
+index 7188c01..b14fddc 100644
+--- a/frontend/src/components/workflow/Step6Results.jsx
++++ b/frontend/src/components/workflow/Step6Results.jsx
+@@ -136,7 +136,7 @@ export function Step6Results({
+           </p>
+         </div>
+         <div className="results-header-actions">
+-          {stepNumber === 7 && onViewCompanyMatches && (
++          {stepNumber === 6 && onViewCompanyMatches && (
+             <Button variant="secondary" size="sm" onClick={onViewCompanyMatches} icon={<Building2 size={14} />}>
+               Company Matches
+             </Button>
+diff --git a/frontend/src/components/workflow/WizardStepper.jsx b/frontend/src/components/workflow/WizardStepper.jsx
+index 6d4eae2..0036deb 100644
+--- a/frontend/src/components/workflow/WizardStepper.jsx
++++ b/frontend/src/components/workflow/WizardStepper.jsx
+@@ -2,13 +2,12 @@ import { Check } from 'lucide-react'
+ import './WizardStepper.css'
+ 
+ const STEPS = [
+-  { id: 1, label: 'Resume', short: 'Resume' },
+-  { id: 2, label: 'Profile Review', short: 'Profile' },
+-  { id: 3, label: 'Job Description', short: 'JD' },
+-  { id: 4, label: 'JD Analysis', short: 'Analysis' },
++  { id: 1, label: 'JD Analytics', short: 'JD Analytics' },
++  { id: 2, label: 'Resume', short: 'Resume' },
++  { id: 3, label: 'Profile Builder', short: 'Profile' },
++  { id: 4, label: 'Talent Check', short: 'Talent' },
+   { id: 5, label: 'Skill Match', short: 'Matching' },
+-  { id: 6, label: 'Talent Check', short: 'Talent' },
+-  { id: 7, label: 'Results', short: 'Results' },
++  { id: 6, label: 'Result', short: 'Result' },
+ ]
+ 
+ export function WizardStepper({
+diff --git a/frontend/src/services/authService.js b/frontend/src/services/authService.js
+index 9afecc3..22f604a 100644
+--- a/frontend/src/services/authService.js
++++ b/frontend/src/services/authService.js
+@@ -1,43 +1,43 @@
+ import { api } from './api'
+ import { setAccessToken } from './authSession'
+ 
++const SESSION_KEY = 'radix_session'
+ let session = null
+-let refreshTimer = null
+-
+-function clearRefreshTimer() {
+-  if (refreshTimer) clearTimeout(refreshTimer)
+-  refreshTimer = null
+-}
+ 
+ function keepSession(nextSession) {
+   session = nextSession
+   setAccessToken(nextSession?.access_token)
+-  clearRefreshTimer()
+-  if (!nextSession) return
+-  const delay = Math.max(1000, new Date(nextSession.expires_at).getTime() - Date.now() - 60_000)
+-  refreshTimer = setTimeout(async () => {
+-    try { keepSession(await request('refresh')) }
+-    catch {
+-      session = null
+-      setAccessToken(null)
+-      if (typeof window !== 'undefined') window.dispatchEvent(new Event('radix:session-expired'))
+-    }
+-  }, delay)
++  if (typeof window === 'undefined') return
++  if (nextSession) window.localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession))
++  else window.localStorage.removeItem(SESSION_KEY)
+ }
+ 
+ async function request(path, body) {
+   const response = await fetch(`${api.baseUrl}/auth/${path}`, {
+-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
++    method: 'POST', headers: { 'Content-Type': 'application/json' },
+     body: body ? JSON.stringify(body) : undefined,
+   })
+   if (!response.ok) {
+     const data = await response.json().catch(() => ({}))
+     throw new Error(data.detail || `Request failed (${response.status}).`)
+   }
+-  if (response.status === 204) return null
+   return response.json()
+ }
+ 
++function restoreSession() {
++  if (session || typeof window === 'undefined') return session
++  try {
++    const saved = JSON.parse(window.localStorage.getItem(SESSION_KEY) || 'null')
++    if (!saved?.access_token || new Date(saved.expires_at).getTime() <= Date.now()) return null
++    session = saved
++    setAccessToken(saved.access_token)
++    return session
++  } catch {
++    window.localStorage.removeItem(SESSION_KEY)
++    return null
++  }
++}
++
+ export const authService = {
+   async login({ email, password }) {
+     keepSession(await request('login', { email, password }))
+@@ -47,21 +47,8 @@ export const authService = {
+     keepSession(await request('register', { name, email, password }))
+     return session
+   },
+-  async logout() {
+-    try { await request('logout') } finally { keepSession(null) }
+-  },
++  async logout() { keepSession(null) },
+   clearSession() { keepSession(null) },
+-  async getSession() {
+-    try {
+-      keepSession(await request('session'))
+-      return session
+-    } catch (error) {
+-      keepSession(null)
+-      if (/401|Refresh token/i.test(error.message)) return null
+-      throw error
+-    }
+-  },
+-  async getCurrentUser() {
+-    return session?.user || null
+-  },
++  async getSession() { return restoreSession() },
++  async getCurrentUser() { return restoreSession()?.user || null },
+ }

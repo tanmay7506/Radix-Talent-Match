@@ -40,7 +40,10 @@
 .company-match-level-values span { color: var(--text-muted); font-weight: var(--weight-regular); }
 .company-match-page-score-note, .company-match-incomplete { margin-top: var(--space-2); color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; }
 .company-match-loading { display: flex; align-items: center; gap: var(--space-3); min-height: 180px; color: var(--text-muted); }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 87d5be9 (new)
 @media (max-width: 700px) {
   .company-match-card-header { align-items: flex-start; }
   .company-match-card-title { gap: var(--space-3); }

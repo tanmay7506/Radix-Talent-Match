@@ -10,10 +10,10 @@ import {
 } from 'lucide-react'
 import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Callout } from '../ui'
 import { FileUploadZone } from '../ui/FileUploadZone'
-import './Step3JobDescription.css'
+import './Step1JdInput.css'
 
-export function Step3JobDescription({
-  inputMode = 'text',
+export function Step1JdInput({
+  inputMode = 'file',
   jdText = '',
   jdFile = null,
   onInputChange,
@@ -83,7 +83,7 @@ export function Step3JobDescription({
   return (
     <div className="wizard-step-container">
       <div className="wizard-step-header">
-        <h2>Step 3: Provide Target Job Description</h2>
+        <h2>Step 1: Provide Target Job Description</h2>
         <p>
           Enter the job description for the role you wish to target. You can either paste the job posting text directly or upload the JD document.
         </p>
@@ -105,22 +105,22 @@ export function Step3JobDescription({
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={mode === 'text'}
-                  className={`jd-tab-btn ${mode === 'text' ? 'active' : ''}`}
-                  onClick={() => handleModeChange('text')}
-                >
-                  <FileText size={15} />
-                  <span>Paste Text</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
                   aria-selected={mode === 'file'}
                   className={`jd-tab-btn ${mode === 'file' ? 'active' : ''}`}
                   onClick={() => handleModeChange('file')}
                 >
                   <Upload size={15} />
                   <span>Upload Document</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'text'}
+                  className={`jd-tab-btn ${mode === 'text' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('text')}
+                >
+                  <FileText size={15} />
+                  <span>Paste Text</span>
                 </button>
               </div>
             </div>

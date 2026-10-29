@@ -59,9 +59,9 @@ function Shell() {
   useEffect(() => {
     if (!userId || profile) return undefined
     const controller = new AbortController()
-    loadProfile(controller.signal)
+    loadProfile(controller.signal, session.user)
     return () => controller.abort()
-  }, [userId, profile, loadProfile])
+  }, [userId, profile, loadProfile, session?.user])
 
   const currentPage = pathname === '/' ? 'home'
     : pathname === '/login' ? 'login'
@@ -204,13 +204,20 @@ export default function App() {
   const [jdData, setJdData] = useState(null)
 
   const setProfile = useCallback((value) => { setProfileState(value); setProfileError('') }, [])
-  const loadProfile = useCallback(async (signal) => {
+  const loadProfile = useCallback(async (signal, user = session?.user) => {
     setProfileLoading(true)
     setProfileError('')
-    try { setProfileState(await profileService.getProfile({ signal })) }
+    try {
+      const savedProfile = await profileService.getProfile({ signal })
+      setProfileState(savedProfile || (user ? {
+        skills: [], education: {}, internships: [], hackathons: [], certifications: [], preferred_roles: [],
+        ...user,
+        source: 'manual',
+      } : null))
+    }
     catch (error) { if (error.name !== 'AbortError') setProfileError(error.message || 'Unable to load your profile.') }
     finally { setProfileLoading(false) }
-  }, [])
+  }, [session?.user])
   const appState = useMemo(() => ({
     session, setSession, profile, setProfile, jdData, setJdData, profileLoading,
     profileError, profileNotice, setProfileNotice, loadProfile,

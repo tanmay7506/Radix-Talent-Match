@@ -124,7 +124,7 @@ export function Step5SkillMatching({
                   icon={<ArrowLeft size={16} />}
                   onClick={onBack}
                 >
-                  Back to JD Review
+                  Back to Talent Check
                 </Button>
                 <Button
                   variant="primary"

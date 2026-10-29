@@ -7,11 +7,10 @@ from uuid import uuid4
 from argon2 import PasswordHasher
 from fastapi import HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials
-from starlette.requests import Request
 
 from routers import auth as auth_router
 from functions.talent_check import supabase_client
-from functions.talent_check.supabase_client import LoginRequest, RefreshRequest, RegisterRequest
+from functions.talent_check.supabase_client import LoginRequest, RegisterRequest
 
 
 class CustomAuthTests(unittest.TestCase):
@@ -90,46 +89,6 @@ class CustomAuthTests(unittest.TestCase):
         self.assertEqual(result, "issued")
         self.assertIn("password", rest_request.call_args.kwargs["params"]["select"])
         issue_session.assert_called_once()
-
-    def test_logout_revokes_hashed_refresh_token_and_clears_cookie(self):
-        request = Request({
-            "type": "http", "method": "POST", "path": "/auth/logout", "headers": [],
-            "query_string": b"", "server": ("test", 80), "client": ("test", 1), "scheme": "http",
-        })
-        response = Response()
-        refresh_token = "r" * 48
-
-        with patch.object(auth_router, "auth_rest_request") as rest_request:
-            result = auth_router.logout(request, response, RefreshRequest(refresh_token=refresh_token))
-
-        self.assertEqual(result.status_code, 204)
-        self.assertEqual(rest_request.call_args.args, ("PATCH", "refresh_tokens"))
-        self.assertEqual(
-            rest_request.call_args.kwargs["params"]["token_hash"],
-            f"eq.{auth_router._hash_refresh_token(refresh_token)}",
-        )
-        self.assertIn("radix_refresh=", response.headers["set-cookie"])
-
-    def test_refresh_uses_atomic_rpc_and_sets_rotated_cookie(self):
-        user_row = {
-            "id": str(uuid4()), "name": "Test User", "email": "test@example.com",
-            "hackathons": [], "internships": [], "certifications": [], "preferred_roles": [],
-        }
-        request = Request({
-            "type": "http", "method": "POST", "path": "/auth/refresh", "headers": [],
-            "query_string": b"", "server": ("test", 80), "client": ("test", 1), "scheme": "http",
-        })
-        response = Response()
-
-        with (
-            patch.object(auth_router, "auth_rest_request", return_value=[{"user_data": user_row}]) as rest_request,
-            patch.object(auth_router, "create_access_token", return_value=("access-token", datetime.now(UTC))),
-        ):
-            result = auth_router.refresh(request, response, RefreshRequest(refresh_token="r" * 48))
-
-        self.assertEqual(result.access_token, "access-token")
-        self.assertEqual(rest_request.call_args.args, ("POST", "rpc/rotate_refresh_token"))
-        self.assertIn("radix_refresh=", response.headers["set-cookie"])
 
     def test_current_user_uses_custom_jwt_subject_for_user_lookup(self):
         user_id = uuid4()

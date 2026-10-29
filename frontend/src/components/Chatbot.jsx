@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useId } from 'react'
 import { MessageSquare, X, Send, Bot, Sparkles, User, AlertCircle } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { api } from '../services/api'
 import './Chatbot.css'
 
@@ -155,9 +156,7 @@ export default function Chatbot() {
                   {msg.role === 'assistant' ? <Sparkles size={13} strokeWidth={2} /> : <User size={13} strokeWidth={2} />}
                 </div>
                 <div className="chatbot-msg-bubble">
-                  {msg.text.split('\n').map((line, i) => (
-                    <span key={i}>{line}{i < msg.text.split('\n').length - 1 && <br/>}</span>
-                  ))}
+                  <ReactMarkdown>{String(msg.text)}</ReactMarkdown>
                   {msg.isStub && (
                     <div style={{ marginTop: '6px', fontSize: '10px', opacity: 0.65, display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <AlertCircle size={11} strokeWidth={2} aria-hidden="true" />
