@@ -14,12 +14,23 @@ import logging
 from pathlib import Path
 from typing import Any
 import requests
+import dotenv
 
 logger = logging.getLogger(__name__)
 
-# Fallback defaults for URL and Key if not in environment
-DEFAULT_SUPABASE_URL = os.environ["SUPABASE_URL"]
-DEFAULT_SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+# Load .env if present
+_env_path = Path(__file__).resolve().parents[2] / ".env"
+if _env_path.exists():
+    dotenv.load_dotenv(_env_path)
+
+# Safe fallback defaults for URL and Key if not in environment
+DEFAULT_SUPABASE_URL = os.environ.get(
+    "SUPABASE_URL", "https://tesuflnbaoijcdudfxwl.supabase.co"
+)
+DEFAULT_SUPABASE_KEY = os.environ.get(
+    "SUPABASE_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3VmbG5iYW9pamNkdWRmeHdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0ODc0MzQsImV4cCI6MjEwODA2MzQzNH0.9AD11-CYeh0bXqNZWFYaxx7Q4o_vG1rgCHjDfERuAic",
+)
 
 # In-memory caches to minimize repeated remote HTTP calls
 _COMPANIES_CACHE: list[dict[str, Any]] | None = None
@@ -27,6 +38,9 @@ _REQUIREMENTS_CACHE: dict[Any, dict[str, int]] = {}
 
 LEGACY_DATA_FILE = (
     Path(__file__).resolve().parent.parent / "data" / "company_skillsets.json"
+)
+FALLBACK_COMPANY_DATA_FILE = (
+    Path(__file__).resolve().parent / "fallback_company_data.json"
 )
 
 
@@ -98,62 +112,81 @@ def fetch_all_companies(force_refresh: bool = False) -> list[dict[str, Any]]:
         logger.error(f"Failed to fetch companies from Supabase: {err}")
         if _COMPANIES_CACHE:
             return _COMPANIES_CACHE
+        if FALLBACK_COMPANY_DATA_FILE.exists():
+            try:
+                with FALLBACK_COMPANY_DATA_FILE.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    _COMPANIES_CACHE = data.get("companies", [])
+                    return _COMPANIES_CACHE
+            except Exception as fb_err:
+                logger.error(f"Failed to load fallback company data: {fb_err}")
         raise RuntimeError(f"Could not load companies from Supabase: {err}") from err
 
 
 def fetch_company_matching_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Fetch the existing company directory and relational skill requirements."""
-    companies = fetch_all_companies()
-    url, _ = get_supabase_credentials()
-    skill_response = requests.get(
-        f"{url}/rest/v1/skill_set_master",
-        params={"select": "skill_set_id,short_name,skill_set_name", "order": "skill_set_id.asc"},
-        headers=_get_headers(),
-        timeout=10,
-    )
-    skill_response.raise_for_status()
-    skill_sets = skill_response.json()
-    if not isinstance(skill_sets, list):
-        raise RuntimeError("Supabase returned an invalid skill_set_master response.")
-
-    company_ids = [company["company_id"] for company in companies if company.get("company_id") is not None]
-    requirements_by_company: dict[Any, dict[int, int]] = {company_id: {} for company_id in company_ids}
-    # Keep each relation request below PostgREST's usual 1,000-row response cap.
-    for offset in range(0, len(company_ids), 50):
-        company_batch = company_ids[offset : offset + 50]
-        id_filter = f"in.({','.join(str(int(company_id)) for company_id in company_batch)})"
-        requirement_response = requests.get(
-            f"{url}/rest/v1/company_skill_levels",
-            params={
-                "select": "company_id,skill_set_id,required_level",
-                "company_id": id_filter,
-                "order": "company_id.asc,skill_set_id.asc",
-            },
+    try:
+        companies = fetch_all_companies()
+        url, _ = get_supabase_credentials()
+        skill_response = requests.get(
+            f"{url}/rest/v1/skill_set_master",
+            params={"select": "skill_set_id,short_name,skill_set_name", "order": "skill_set_id.asc"},
             headers=_get_headers(),
             timeout=10,
         )
-        requirement_response.raise_for_status()
-        requirement_rows = requirement_response.json()
-        if not isinstance(requirement_rows, list):
-            raise RuntimeError("Supabase returned an invalid company_skill_levels response.")
-        for row in requirement_rows:
-            company_requirements = requirements_by_company.get(row.get("company_id"))
-            try:
-                skill_id = int(row["skill_set_id"])
-                level = int(row["required_level"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            if company_requirements is not None and 1 <= level <= 10:
-                company_requirements[skill_id] = level
+        skill_response.raise_for_status()
+        skill_sets = skill_response.json()
+        if not isinstance(skill_sets, list):
+            raise RuntimeError("Supabase returned an invalid skill_set_master response.")
 
-    enriched_companies = []
-    for company in companies:
-        company_id = company.get("company_id")
-        enriched_companies.append({
-            **company,
-            "skill_requirements": requirements_by_company.get(company_id, {}),
-        })
-    return skill_sets, enriched_companies
+        company_ids = [company["company_id"] for company in companies if company.get("company_id") is not None]
+        requirements_by_company: dict[Any, dict[int, int]] = {company_id: {} for company_id in company_ids}
+        # Keep each relation request below PostgREST's usual 1,000-row response cap.
+        for offset in range(0, len(company_ids), 50):
+            company_batch = company_ids[offset : offset + 50]
+            id_filter = f"in.({','.join(str(int(company_id)) for company_id in company_batch)})"
+            requirement_response = requests.get(
+                f"{url}/rest/v1/company_skill_levels",
+                params={
+                    "select": "company_id,skill_set_id,required_level",
+                    "company_id": id_filter,
+                    "order": "company_id.asc,skill_set_id.asc",
+                },
+                headers=_get_headers(),
+                timeout=10,
+            )
+            requirement_response.raise_for_status()
+            requirement_rows = requirement_response.json()
+            if not isinstance(requirement_rows, list):
+                raise RuntimeError("Supabase returned an invalid company_skill_levels response.")
+            for row in requirement_rows:
+                company_requirements = requirements_by_company.get(row.get("company_id"))
+                try:
+                    skill_id = int(row["skill_set_id"])
+                    level = int(row["required_level"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if company_requirements is not None and 1 <= level <= 10:
+                    company_requirements[skill_id] = level
+
+        enriched_companies = []
+        for company in companies:
+            company_id = company.get("company_id")
+            enriched_companies.append({
+                **company,
+                "skill_requirements": requirements_by_company.get(company_id, {}),
+            })
+        return skill_sets, enriched_companies
+    except Exception as err:
+        logger.warning(f"Live Supabase company matching fetch failed: {err}. Attempting fallback data.")
+        if FALLBACK_COMPANY_DATA_FILE.exists():
+            try:
+                with FALLBACK_COMPANY_DATA_FILE.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return data.get("skill_sets", []), data.get("companies", [])
+            except Exception as fb_err:
+                logger.error(f"Failed to load fallback company data: {fb_err}")
+        raise
 
 
 def fetch_company_requirements(
