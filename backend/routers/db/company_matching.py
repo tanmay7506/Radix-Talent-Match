@@ -33,6 +33,7 @@ class SkillMatchDetail(BaseModel):
 class CompanyMatch(BaseModel):
     company_id: int | str
     company_name: str
+    short_name: str | None = None
     match_score: float
     matched_skills: list[SkillMatchDetail]
     missing_skills: list[str]
@@ -85,13 +86,15 @@ def _company_name(company: dict[str, Any]) -> str:
     return "Company"
 
 
+def _clean_title(name: str) -> str:
+    cleaned = name.strip()
+    if cleaned.isupper() and len(cleaned) > 3:
+        cleaned = cleaned.title()
+    return cleaned
+
+
 @router.post("", response_model=CompanyMatchResponse)
 def rank_companies(payload: CompanyMatchRequest) -> CompanyMatchResponse:
-    # Reject duplicate categories: silently choosing one would make the score ambiguous.
-    codes = [skill.skill_code.upper() for skill in payload.skills]
-    if len(set(codes)) != len(codes):
-        raise HTTPException(status_code=422, detail="Candidate skills must not repeat a skill code.")
-
     try:
         skill_sets, companies = fetch_company_matching_data()
     except Exception as error:
@@ -106,18 +109,21 @@ def rank_companies(payload: CompanyMatchRequest) -> CompanyMatchResponse:
         if code:
             skill_by_code[code] = (index, str(row.get("skill_set_name") or row.get("name") or code))
 
-    candidate_by_index: dict[int, float] = {}
+    # Deduplicate candidate skills: keep the highest level if a code repeats
+    deduped_skills: dict[str, int] = {}
     for skill in payload.skills:
         code = _canonical_code(skill.skill_code)
-        # The existing profile's OTH entry is outside the canonical 12-vector.
-        if code == "OTHER":
-            continue
+        if code and code != "OTHER":
+            deduped_skills[code] = max(deduped_skills.get(code, 0), skill.skill_level)
+
+    candidate_by_index: dict[int, float] = {}
+    for code, level in deduped_skills.items():
         canonical = skill_by_code.get(code)
         if canonical is None:
-            raise HTTPException(status_code=422, detail=f"Unknown skill code: {skill.skill_code}")
+            raise HTTPException(status_code=422, detail=f"Unknown skill code: {code}")
         # The existing relational company requirements and candidate profile
         # both use the established 1–10 proficiency scale.
-        candidate_by_index[canonical[0]] = float(skill.skill_level)
+        candidate_by_index[canonical[0]] = float(level)
 
     matches: list[CompanyMatch] = []
     for company in companies:
@@ -156,9 +162,18 @@ def rank_companies(payload: CompanyMatchRequest) -> CompanyMatchResponse:
         # Score is requirement coverage across explicitly represented skills.
         # Missing candidate dimensions are excluded and separately reported.
         score = round((sum(contributions) / len(contributions) * 100) if contributions else 0.0, 1)
+
+        raw_short = company.get("short_name")
+        raw_full = company.get("name") or company.get("company_name") or ""
+        short_name = _clean_title(raw_short) if isinstance(raw_short, str) and raw_short.strip() else None
+        full_name = _clean_title(raw_full) if isinstance(raw_full, str) and raw_full.strip() else _company_name(company)
+        # Prefer the short brand name as the primary company name
+        display_name = short_name or full_name
+
         matches.append(CompanyMatch(
             company_id=company_id,
-            company_name=_company_name(company),
+            company_name=display_name,
+            short_name=short_name,
             match_score=score,
             matched_skills=details,
             missing_skills=missing,
