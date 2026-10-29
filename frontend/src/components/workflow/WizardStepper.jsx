@@ -2,13 +2,12 @@ import { Check } from 'lucide-react'
 import './WizardStepper.css'
 
 const STEPS = [
-  { id: 1, label: 'Resume', short: 'Resume' },
-  { id: 2, label: 'Profile Review', short: 'Profile' },
-  { id: 3, label: 'Job Description', short: 'JD' },
-  { id: 4, label: 'JD Analysis', short: 'Analysis' },
+  { id: 1, label: 'JD Analytics', short: 'JD Analytics' },
+  { id: 2, label: 'Resume', short: 'Resume' },
+  { id: 3, label: 'Profile Builder', short: 'Profile' },
+  { id: 4, label: 'Talent Check', short: 'Talent' },
   { id: 5, label: 'Skill Match', short: 'Matching' },
-  { id: 6, label: 'Talent Check', short: 'Talent' },
-  { id: 7, label: 'Results', short: 'Results' },
+  { id: 6, label: 'Result', short: 'Result' },
 ]
 
 export function WizardStepper({

@@ -11,9 +11,7 @@ Includes fallback to project data files for legacy test fixtures if requested.
 import os
 import json
 import logging
-import hashlib
 import re
-import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Annotated
@@ -21,6 +19,7 @@ from uuid import UUID
 
 import jwt
 import requests
+<<<<<<< HEAD
 import dotenv
 
 logger = logging.getLogger(__name__)
@@ -38,6 +37,182 @@ DEFAULT_SUPABASE_KEY = os.environ.get(
     "SUPABASE_KEY",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3VmbG5iYW9pamNkdWRmeHdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0ODc0MzQsImV4cCI6MjEwODA2MzQzNH0.9AD11-CYeh0bXqNZWFYaxx7Q4o_vG1rgCHjDfERuAic",
 )
+=======
+from argon2 import PasswordHasher
+from dotenv import load_dotenv
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+logger = logging.getLogger(__name__)
+
+# Authentication primitives live alongside the backend's Supabase data client.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
+APP_AUTH_SECRET = os.getenv("APP_AUTH_SECRET", "")
+JWT_ISSUER = os.getenv("APP_AUTH_ISSUER", "radix-talent-match")
+ACCESS_TOKEN_MINUTES = int(os.getenv("APP_ACCESS_TOKEN_MINUTES", "43200"))
+JWT_ALGORITHM = "HS256"
+PASSWORD_HASHER = PasswordHasher()
+BEARER = HTTPBearer(auto_error=False)
+
+
+def _auth_supabase_config() -> tuple[str, str]:
+    url = os.getenv("SUPABASE_URL", "").strip() or DEFAULT_SUPABASE_URL
+    # Prefer the explicitly named service-role alias, while supporting existing
+    # deployments where SUPABASE_KEY is already the privileged server key.
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.getenv("SUPABASE_KEY", "").strip() or DEFAULT_SUPABASE_KEY
+    if not url or not key:
+        raise HTTPException(status_code=503, detail="Privileged authentication database access is not configured.")
+    return url.rstrip("/"), key
+
+
+def auth_rest_request(method: str, path: str, *, params: dict[str, str] | None = None, json_body: object | None = None, prefer: str | None = None) -> list[dict[str, Any]]:
+    url, key = _auth_supabase_config()
+    headers = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    if prefer:
+        headers["Prefer"] = prefer
+    try:
+        response = requests.request(method, f"{url}/rest/v1/{path}", headers=headers, params=params, json=json_body, timeout=10)
+    except requests.RequestException as exc:
+        logger.error("Auth PostgREST request %s %s failed (%s)", method, path, type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Authentication data service is unavailable.") from exc
+    if response.status_code >= 400:
+        if response.status_code == 409:
+            raise HTTPException(status_code=409, detail="An account with this email already exists.")
+        try:
+            error_body = response.json()
+        except ValueError:
+            error_body = {}
+        if not isinstance(error_body, dict):
+            error_body = {}
+
+        def safe_diagnostic(value: object) -> str | None:
+            if value is None:
+                return None
+            diagnostic = str(value)[:500]
+            diagnostic = re.sub(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", "[redacted-email]", diagnostic, flags=re.IGNORECASE)
+            diagnostic = re.sub(r"\([^)]*\)=\([^)]*\)", "(value)=[redacted]", diagnostic)
+            diagnostic = re.sub(r"\b(?:eyJ[A-Za-z0-9_-]{20,}|[A-Za-z0-9_-]{40,})\b", "[redacted-token]", diagnostic)
+            return diagnostic
+
+        logger.error(
+            "Auth PostgREST request %s %s returned HTTP %s: code=%s message=%s details=%s hint=%s",
+            method,
+            path,
+            response.status_code,
+            safe_diagnostic(error_body.get("code")),
+            safe_diagnostic(error_body.get("message")),
+            safe_diagnostic(error_body.get("details")),
+            safe_diagnostic(error_body.get("hint")),
+        )
+        raise HTTPException(status_code=503, detail="Authentication data service is unavailable.")
+    if not response.content:
+        return []
+    data = response.json()
+    if not isinstance(data, list):
+        raise HTTPException(status_code=503, detail="Authentication data service returned an invalid response.")
+    return data
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+class UserPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    email: EmailStr
+    education_id: int | None = None
+    hackathons: list[str] = Field(default_factory=list)
+    internships: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    preferred_roles: list[str] = Field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AuthenticatedUser(UserPublic):
+    pass
+
+
+class RegisterRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Name cannot be empty.")
+        return cleaned
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class TokenResponse(BaseModel):
+    user: UserPublic
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+
+
+class ProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    skills: list[dict[str, Any]] | None = None
+    hackathons: list[str] | None = None
+    internships: list[str] | None = None
+    certifications: list[str] | None = None
+    preferred_roles: list[str] | None = None
+    education: dict[str, str | int | float | None] | None = None
+
+
+def _auth_configured() -> None:
+    if not APP_AUTH_SECRET or len(APP_AUTH_SECRET.encode()) < 32:
+        raise HTTPException(status_code=503, detail="Authentication secret is not configured securely.")
+
+
+def create_access_token(user_id: UUID) -> tuple[str, datetime]:
+    _auth_configured()
+    now = datetime.now(UTC)
+    expires = now + timedelta(minutes=ACCESS_TOKEN_MINUTES)
+    token = jwt.encode({"sub": str(user_id), "iat": now, "exp": expires, "iss": JWT_ISSUER, "type": "access"}, APP_AUTH_SECRET, algorithm=JWT_ALGORITHM)
+    return token, expires
+
+
+def _decode_access_token(token: str) -> UUID:
+    _auth_configured()
+    try:
+        claims = jwt.decode(token, APP_AUTH_SECRET, algorithms=[JWT_ALGORITHM], issuer=JWT_ISSUER, options={"require": ["sub", "iat", "exp", "iss", "type"]})
+        if claims.get("type") != "access":
+            raise jwt.InvalidTokenError("Wrong token type")
+        return UUID(claims["sub"])
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired access token.", headers={"WWW-Authenticate": "Bearer"}) from exc
+
+
+def _public_user(row: dict[str, object]) -> UserPublic:
+    return UserPublic.model_validate({key: value for key, value in row.items() if key not in {"password", "token_hash"}})
+
+
+def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER)]) -> AuthenticatedUser:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Authentication required.", headers={"WWW-Authenticate": "Bearer"})
+    user_id = _decode_access_token(credentials.credentials)
+    rows = auth_rest_request("GET", "users", params={"select": "id,name,email,education_id,hackathons,internships,certifications,preferred_roles,created_at,updated_at", "id": f"eq.{user_id}", "limit": "1"})
+    if not rows:
+        raise HTTPException(status_code=401, detail="Invalid or expired access token.")
+    return AuthenticatedUser.model_validate(rows[0])
+
+# Fallback defaults for URL and Key if not in environment
+DEFAULT_SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+DEFAULT_SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
+>>>>>>> 87d5be9 (new)
 
 # In-memory caches to minimize repeated remote HTTP calls
 _COMPANIES_CACHE: list[dict[str, Any]] | None = None

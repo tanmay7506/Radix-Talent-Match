@@ -136,7 +136,7 @@ export function Step6Results({
           </p>
         </div>
         <div className="results-header-actions">
-          {stepNumber === 7 && onViewCompanyMatches && (
+          {stepNumber === 6 && onViewCompanyMatches && (
             <Button variant="secondary" size="sm" onClick={onViewCompanyMatches} icon={<Building2 size={14} />}>
               Company Matches
             </Button>

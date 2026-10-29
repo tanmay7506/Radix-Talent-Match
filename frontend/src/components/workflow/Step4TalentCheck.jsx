@@ -3,7 +3,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, Building2, RotateCcw } from 'lucide
 import { api } from '../../services/api'
 import { Button, Callout, Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui'
 
-export function Step6TalentCheck({ profile, jdData, onBack, onComplete }) {
+export function Step4TalentCheck({ profile, jdData, onBack, onComplete }) {
   const [companies, setCompanies] = useState([])
   const [selectedCompany, setSelectedCompany] = useState('')
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(true)
@@ -76,7 +76,7 @@ export function Step6TalentCheck({ profile, jdData, onBack, onComplete }) {
   return (
     <div className="wizard-step-container">
       <div className="wizard-step-header">
-        <h2>Step 6: Company Talent Check</h2>
+        <h2>Step 4: Company Talent Check</h2>
         <p>Compare the candidate’s assessed skill levels with a company’s requirements.</p>
       </div>
 
@@ -116,7 +116,7 @@ export function Step6TalentCheck({ profile, jdData, onBack, onComplete }) {
               </select>
             </div>
             <div className="wizard-action-bar">
-              <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={onBack} disabled={isChecking}>Back to Skill Match</Button>
+              <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={onBack} disabled={isChecking}>Back to Profile Builder</Button>
               <Button type="submit" variant="primary" size="lg" isLoading={isChecking || isLoadingCompanies} disabled={!selectedCompany || companies.length === 0} iconRight={<ArrowRight size={16} />}>
                 Run Talent Check
               </Button>

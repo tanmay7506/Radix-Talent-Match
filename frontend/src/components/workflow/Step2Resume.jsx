@@ -4,7 +4,7 @@ import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Call
 import { FileUploadZone } from '../ui/FileUploadZone'
 import ProfileCard from '../ProfileCard'
 import SkillsGrid from '../SkillsGrid'
-import './Step1Resume.css'
+import './Step2Resume.css'
 
 function formatFileSize(bytes) {
   if (!bytes) return ''
@@ -13,7 +13,7 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function Step1Resume({
+export function Step2Resume({
   selectedFile,
   onFileChange,
   onSubmit,
@@ -62,7 +62,7 @@ export function Step1Resume({
   return (
     <div className="wizard-step-container">
       <div className="wizard-step-header">
-        <h2>Step 1: Choose a candidate profile</h2>
+        <h2>Step 2: Choose a candidate profile</h2>
         <p>
           Use the profile you have already reviewed, or update it from a new resume.
         </p>

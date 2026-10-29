@@ -157,7 +157,29 @@ export function SignupPage() {
       setSession(nextSession)
 
       if (mode === 'resume') {
-        setProfile({ ...resumeProfile, name, email, source: 'resume' })
+        const candidateProfile = { ...resumeProfile, name, email, source: 'resume' }
+        setProfile(candidateProfile)
+        const education = candidateProfile.education
+        const cgpa = Number(education?.cgpa)
+        const hasCompleteEducation = Boolean(
+          education?.degree?.trim() && education?.college?.trim() &&
+          (education?.graduation_year || education?.graducation_year) &&
+          Number.isFinite(cgpa) && cgpa > 1 && cgpa <= 10,
+        )
+        try {
+          const savedProfile = await profileService.saveProfile({
+            name, email,
+            skills: candidateProfile.skills,
+            ...(hasCompleteEducation ? { education: { ...education, cgpa, graduation_year: education.graduation_year || education.graducation_year } } : {}),
+            hackathons: candidateProfile.hackathons,
+            internships: candidateProfile.internships,
+            certifications: candidateProfile.certifications,
+            preferred_roles: candidateProfile.preferred_roles,
+          })
+          setProfile({ ...candidateProfile, ...savedProfile, skills: savedProfile.skills || candidateProfile.skills, education: savedProfile.education || candidateProfile.education })
+        } catch (saveError) {
+          console.error('Could not save extracted profile.', saveError)
+        }
         await navigate({ to: '/profile/setup', search: { review: true } })
       } else {
         setProfile({ name, email, source: 'manual', skills: [] })

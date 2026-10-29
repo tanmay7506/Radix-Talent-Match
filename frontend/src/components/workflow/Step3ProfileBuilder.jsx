@@ -9,9 +9,9 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Badge } from '../ui'
-import './Step2ProfileReview.css'
+import './Step3ProfileBuilder.css'
 
-export function Step2ProfileReview({
+export function Step3ProfileBuilder({
   _originalProfile,
   profile,
   onProfileChange,
@@ -132,7 +132,7 @@ export function Step2ProfileReview({
     <div className="wizard-step-container">
       <div className="wizard-step-header">
         <div className="header-badge-row">
-          <h2>Step 2: Review &amp; Edit Extracted Profile</h2>
+          <h2>Step 3: Review &amp; Edit Extracted Profile</h2>
           {isEdited && (
             <Badge variant="accent" size="sm">
               Custom Edits Applied
