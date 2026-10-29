@@ -25,7 +25,13 @@
   max-width: 700px;
 }
 
-.resume-upload-card {
+.step1-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.step1-card {
   width: 100%;
 }
 

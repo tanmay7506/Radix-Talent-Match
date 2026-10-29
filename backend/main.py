@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers.talent_check import talent_check_router
 from routers.db.company_matching import router as company_matching_router
 from routers.chat import chat_router
+from routers.auth import router as auth_router, profiles_router
 
 app = FastAPI(title="RADIX Talent Match API")
 
@@ -39,6 +40,8 @@ app.include_router(skill_matching_router)
 app.include_router(talent_check_router)
 app.include_router(company_matching_router)
 app.include_router(chat_router)
+app.include_router(auth_router)
+app.include_router(profiles_router)
 
 # /api prefixed endpoints (for Vercel rewrites and reverse proxy deployments)
 api_router = APIRouter(prefix="/api")
@@ -48,6 +51,8 @@ api_router.include_router(skill_matching_router)
 api_router.include_router(talent_check_router)
 api_router.include_router(company_matching_router)
 api_router.include_router(chat_router)
+api_router.include_router(auth_router)
+api_router.include_router(profiles_router)
 app.include_router(api_router)
 
 

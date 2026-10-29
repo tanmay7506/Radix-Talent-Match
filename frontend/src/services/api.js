@@ -1,5 +1,11 @@
 import { createJdPdfFile } from '../utils/textToPdf'
 import { notifySessionExpired } from './sessionEvents'
+import { getAccessToken } from './authSession'
+
+function authHeaders(headers = {}) {
+  const token = getAccessToken()
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers
+}
 
 /**
  * Centralized API service for RADIX Talent Match backend communication.
@@ -62,6 +68,7 @@ async function postFormData(endpoint, formData, signal) {
       method: 'POST',
       body: formData,
       credentials: 'include',
+      headers: authHeaders(),
       signal: requestController.signal,
     })
 
@@ -99,10 +106,11 @@ async function postJson(endpoint, data, signal) {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
+      headers: authHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify(data),
+      credentials: 'include',
       signal,
     })
 
@@ -134,7 +142,7 @@ async function postJson(endpoint, data, signal) {
 async function getJson(endpoint, signal) {
   const url = resolveUrl(endpoint)
   try {
-    const res = await fetch(url, { signal })
+    const res = await fetch(url, { signal, credentials: 'include', headers: authHeaders() })
     if (!res.ok) {
       notifySessionExpired(res)
       let errorDetail = res.statusText

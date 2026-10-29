@@ -68,13 +68,13 @@ export function Step1Resume({
         </p>
       </div>
 
-      <div className="wizard-step-body">
-        {savedProfile && <Card className="resume-upload-card" padding="lg">
+      <div className="wizard-step-body step1-card-list">
+        {savedProfile && <Card className="step1-card" padding="lg">
           <CardHeader><CardTitle as="h3">Use your saved profile</CardTitle><CardDescription>{savedProfile.name || 'Your profile'}{savedProfile.skills?.length ? ` · ${savedProfile.skills.slice(0, 5).map((item) => typeof item === 'string' ? item : item.skill_name).join(', ')}` : ' · Add skills to improve your match'}</CardDescription></CardHeader>
           <CardContent><details className="saved-profile-preview"><summary>Inspect profile details</summary><ProfileCard profile={savedProfile}/><SkillsGrid skills={savedProfile.skills}/></details><div className="wizard-action-bar"><Button variant="secondary" onClick={() => onNavigate?.('/profile')}>Edit profile</Button><Button variant="primary" onClick={onUseProfile}>Use this profile</Button></div></CardContent>
         </Card>}
-        {!savedProfile && <Card className="resume-upload-card" padding="md"><CardContent><Callout type="info">No saved profile yet. Create one from a resume below or set it up manually on the Profile page.</Callout><Button variant="secondary" onClick={() => onNavigate?.('/profile')}>Create profile manually</Button></CardContent></Card>}
-        <Card className="resume-upload-card" padding="lg">
+        {!savedProfile && <Card className="step1-card" padding="md"><CardContent><Callout type="info">No saved profile yet. Create one from a resume below or set it up manually on the Profile page.</Callout><Button variant="secondary" onClick={() => onNavigate?.('/profile')}>Create profile manually</Button></CardContent></Card>}
+        <Card className="step1-card" padding="lg">
           <CardHeader>
             <CardTitle as="h3">Resume Document</CardTitle>
             <CardDescription>

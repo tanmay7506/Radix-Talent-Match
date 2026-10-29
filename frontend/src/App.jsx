@@ -77,7 +77,7 @@ function Shell() {
     try { await authService.logout() } catch { /* Local route state still needs to clear. */ }
     setSession(null)
     setProfile(null)
-    go('/login')
+    go('/')
   }
 
   return <>

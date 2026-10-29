@@ -11,9 +11,9 @@ The following interfaces are provisional because the current backend has no matc
 | Service operation | Provisional request | Provisional response |
 | --- | --- | --- |
 | Auth `login` | `POST /auth/login` `{ email, password }` | session object with `user` |
-| Auth `signup` | `POST /auth/signup` `{ name, email, password }` | session object with `user` |
-| Auth `logout` | `POST /auth/logout` | success response |
-| Auth `getSession` | `GET /auth/session` | session object or `401` |
+| Auth `signup` | `POST /auth/register` `{ name, email, password }` | `{ user, access_token, token_type, expires_at }`; refresh cookie set |
+| Auth `logout` | `POST /auth/logout` | `204`; refresh cookie cleared |
+| Auth `getSession` | `GET /auth/session` | Rotates refresh cookie and returns a new access token |
 | Profile `getProfile` | `GET /profiles/me` | profile object or `404` |
 | Profile `saveProfile` | `PUT /profiles/me` with profile JSON | saved profile including optional `updated_at` |
 | Results `listResults` | `GET /match-results` | array of saved result objects |
@@ -24,12 +24,14 @@ The result page expects saved records to include `id` and `matchResult`; profile
 
 ## Development mock mode
 
-Set `VITE_ENABLE_DEV_MOCKS=true` in a local `.env` file to enable the in-memory auth, profile, and result adapters. The flag has no effect in production builds (`import.meta.env.DEV` must also be true). Mock sessions, profiles, and history are volatile and disappear on refresh. Mock login only demonstrates navigation; it is not secure authentication. Resume extraction and match analysis still call the existing configured backend.
+Authentication always uses the backend, including in development. Configure the backend auth environment described in `backend/AUTHENTICATION.md`; the browser stores access tokens in memory and sends them as bearer credentials, while the refresh cookie remains HttpOnly. Signup requires a 12 character password. Password reset is not currently provided by the backend.
 
-Without the flag, auth/profile/history adapters make the provisional HTTP requests above. Configure `VITE_API_URL` using the existing environment convention. Never enable the mock flag as a production authentication or persistence provider.
+The existing `VITE_ENABLE_DEV_MOCKS` flag still enables the in-memory profile and result adapters during local development; it does not affect authentication. Resume extraction and match analysis call the configured backend.
+
+With mocks disabled, profile and history adapters make the HTTP requests above. Configure `VITE_API_URL` using the existing environment convention. Never enable the mock flag as a production persistence provider.
 
 ## Deep links in deployment
 
 TanStack Router uses browser history URLs. Configure the static host to serve `index.html` for app routes such as `/login`, `/profile/setup`, `/match`, and `/history/:resultId`, while leaving API and static asset paths untouched. Vite dev and preview servers provide SPA fallback automatically; production hosting must provide its equivalent rewrite.
 
-No server-side route or database has been added by this frontend change.
+The auth endpoints and database migration are defined by the backend contract in `backend/AUTHENTICATION.md`.

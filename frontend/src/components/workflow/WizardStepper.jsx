@@ -16,11 +16,12 @@ export function WizardStepper({
   maxStepReached,
   onStepClick,
   isProcessing = false,
+  steps = STEPS,
 }) {
   return (
     <nav className="wizard-stepper" aria-label="Talent Match workflow progress">
       <ol className="wizard-stepper-list">
-        {STEPS.map((step) => {
+        {steps.map((step) => {
           const isCurrent = currentStep === step.id
           const isCompleted = currentStep > step.id
           const isAccessible = step.id <= maxStepReached && !isProcessing
@@ -51,7 +52,7 @@ export function WizardStepper({
                 </span>
               </button>
 
-              {step.id < STEPS.length && (
+              {step.id < steps.length && (
                 <div
                   className={`wizard-step-connector ${isCompleted ? 'connector-completed' : ''}`}
                   aria-hidden="true"
